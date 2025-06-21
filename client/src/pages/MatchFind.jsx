@@ -8,6 +8,7 @@ import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import { FaArrowRight } from "react-icons/fa6";
 import { TiTick } from "react-icons/ti";
+import { toast } from "sonner";
 
 const Home = () => {
   const { socket, match } = useSocket();
@@ -42,6 +43,11 @@ const Home = () => {
 
   const handleStop = () => {
     socket?.emit("exit");
+  };
+
+  const handleEnd = () => {
+    socket?.emit("leave-queue");
+    setLoading(true);
   };
 
   React.useEffect(() => {
@@ -105,16 +111,27 @@ const Home = () => {
               />
               <div className="flex flex-col justify-center bg-white/70 rounded-2xl p-8 shadow-lg transition-all duration-500">
                 <div className="flex text-xl font-semibold gap-2 mb-4">
-                  <span className="text-gray-700">Username:</span>
-                  <span className="text-pink-500">@{match.user.username}</span>
+                  <span className="text-pink-500 font-bold text-2xl text-center">{match.user.username}</span>
                 </div>
                 <div className="flex text-lg font-medium gap-2 mb-2">
                   <span className="text-gray-700">I Speak:</span>
-                  <span className="text-purple-500">hindi</span>
+                  <span className="text-purple-500">hindi/English</span>
                 </div>
                 <div className="flex text-lg font-medium gap-2">
-                  <span className="text-gray-700">Hobbies:</span>
-                  <span className="text-yellow-500">football</span>
+                 <div>
+              <span className="font-semibold ">Hobbies:</span>
+              <span className="ml-2 text-gray-700">
+                {match.user.hobbies && match.user.hobbies.length > 0 ? (
+                  <div className="flex flex-col gap-1 mt-2">
+                    {match.user.hobbies.map((hobby, idx) => (
+                      <div key={idx} className="bg-blue-100 rounded px-2 py-1  font-semibold uppercase text-[#d75c28] w-fit">
+                        {hobby}
+                      </div>
+                    ))}
+                  </div>
+                ) : 'N/A'}
+              </span>
+            </div>
                 </div>
                 {(isAccepted || isPartnerAccepted) && (
                   <div className="mt-4">
@@ -163,7 +180,7 @@ const Home = () => {
       <Link
         to="/home"
         className="bg-gradient-to-r from-yellow-400 to-pink-400 text-white px-12 py-4 rounded-full mt-10 cursor-pointer hover:from-pink-500 hover:to-yellow-500 transition-all duration-300 font-bold shadow-lg tracking-wide hover:scale-105 active:scale-95"
-        onClick={handleStop}
+        onClick={handleEnd}
       >
         STOP
       </Link>

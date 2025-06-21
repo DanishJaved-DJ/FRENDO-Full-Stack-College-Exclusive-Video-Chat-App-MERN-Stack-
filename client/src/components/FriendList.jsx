@@ -8,12 +8,14 @@ import { useNavigate } from "react-router-dom";
 import { useContext } from 'react';
 import Context from '../context/Context';
 import { useSelector } from 'react-redux';
+import ViewFriendProfile from "./ViewFriendProfile"; 
 
 
 const FriendList = () => {
   const { onlineUsers, socket } = useSocket();
   const [friends, setFriends] = useState([]);
   const [incomingCall, setIncomingCall] = useState(null);
+  const [showFirendProfile, setShowFriendProfile] = useState(false);
   const navigate = useNavigate();
 
    const context = useContext(Context);
@@ -33,32 +35,32 @@ const FriendList = () => {
   }, []);
   
   
-  useEffect(() => {
-    socket.on("incoming-friend-call", ({ from, user }) => {
-      console.log("Incoming call from:", user.username);
-      setIncomingCall({ from, user });
-    });
+  // useEffect(() => {
+  //   socket.on("incoming-friend-call", ({ from, user }) => {
+  //     console.log("Incoming call from:", user.username);
+  //     setIncomingCall({ from, user });
+  //   });
 
-    socket.on("friend-call-rejected", ({ user }) => {
-      alert(`${user.username} rejected your call`);
-    });
+  //   socket.on("friend-call-rejected", ({ user }) => {
+  //     alert(`${user.username} rejected your call`);
+  //   });
 
-    socket.on("friend-call-timeout", ({ message }) => {
-      alert(message || "Call timed out");
-    });
+  //   socket.on("friend-call-timeout", ({ message }) => {
+  //     alert(message || "Call timed out");
+  //   });
 
-    socket.on("match-confirmed", ({ partner }) => {
-      console.log("Matched with:", partner);
-      // Redirect to chat/call screen if needed
-    });
+  //   socket.on("match-confirmed", ({ partner }) => {
+  //     console.log("Matched with:", partner);
+  //     // Redirect to chat/call screen if needed
+  //   });
 
-    return () => {
-      socket.off("incoming-friend-call");
-      socket.off("friend-call-rejected");
-      socket.off("friend-call-timeout");
-      socket.off("match-confirmed");
-    };
-  }, []);
+  //   return () => {
+  //     socket.off("incoming-friend-call");
+  //     socket.off("friend-call-rejected");
+  //     socket.off("friend-call-timeout");
+  //     socket.off("match-confirmed");
+  //   };
+  // }, []);
 
     const handleCall = (toSocketId) => {
     socket.emit("friend-call", { to: toSocketId });
@@ -96,46 +98,64 @@ const FriendList = () => {
         )}
         {friends.map((friend) => {
           const isOnline = onlineUsers.some((u) => String(u._id) === String(friend.user._id));
-          return (
-            <li
+            return (
+            <>
+              <li
               key={friend.user._id}
               className={`flex items-center px-6 py-4 hover:bg-gray-50 transition group ${!isOnline ? "opacity-50" : ""}`}
-            >
+              >
               <div className="relative mr-4">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-pink-400 via-purple-400 to-yellow-400 p-1">
-                  <img
-                    src={friend.user.avatarUrl || `https://ui-avatars.com/api/?name=${friend.user.username}`}
-                    alt={friend.user.username}
-                    className="w-full h-full rounded-full object-cover bg-white"
-                  />
-                </div>
-                <span
-                  className={`absolute bottom-0 right-0 block w-3 h-3 rounded-full border-2 border-white ${
-                    isOnline ? "bg-green-400" : "bg-gray-300"
-                  }`}
-                ></span>
+              <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-pink-400 via-purple-400 to-yellow-400 p-1">
+              <img
+                src={friend.user.avatarUrl || `https://ui-avatars.com/api/?name=${friend.user.username}`}
+                alt={friend.user.username}
+                className="w-full h-full rounded-full object-cover bg-white"
+              />
+              </div>
+              <span
+              className={`absolute bottom-0 right-0 block w-3 h-3 rounded-full border-2 border-white ${
+                isOnline ? "bg-green-400" : "bg-gray-300"
+              }`}
+              ></span>
               </div>
               <div className="flex-1">
-                <span className="block font-semibold text-gray-800 group-hover:text-pink-500 transition">
-                  {friend.user.username}
-                </span>
-                <span className="text-xs text-gray-400">
-                  {isOnline ? "Online" : "Offline"}
-                </span>
+              <span
+              className="block font-semibold text-gray-800 group-hover:text-pink-500 transition cursor-pointer hover:underline"
+              onClick={() => setShowFriendProfile(friend.user)}
+              >
+              {friend.user.username}
+              </span>
+              <span className="text-xs text-gray-400">
+              {isOnline ? "Online" : "Offline"}
+              </span>
               </div>
               {isOnline && (
-                <button
-                  className="ml-4 p-2 rounded-full hover:bg-pink-100 transition text-pink-500"
-                  onClick={() => {
-                    handleCall(friend.user._id);
-                    toast.success(`Calling ${friend.user.username}`);
-                  }}
-                >
-                  <TbPhoneCall className="text-2xl" />
-                </button>
+              <button
+              className="ml-4 p-2 rounded-full hover:bg-pink-100 transition text-pink-500"
+              onClick={() => {
+                handleCall(friend.user._id);
+                toast.success(`Calling ${friend.user.username}`);
+              }}
+              >
+              <TbPhoneCall className="text-2xl" />
+              </button>
               )}
-            </li>
-          );
+              </li>
+              {showFirendProfile && showFirendProfile._id === friend.user._id && (
+              <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-white/30 backdrop-blur-sm"
+              onClick={() => setShowFriendProfile(false)}
+              >
+              <div
+              className="bg-white rounded-lg shadow-lg p-6 relative"
+              onClick={e => e.stopPropagation()}
+              >
+              <ViewFriendProfile user={friend.user} />
+              </div>
+              </div>
+              )}
+            </>
+            );
         })}
       </ul>
     </div>

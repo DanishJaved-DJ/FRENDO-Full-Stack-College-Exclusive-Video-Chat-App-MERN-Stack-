@@ -1,12 +1,20 @@
 import Header from '../components/Header';
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import Api from '../serverApi/Api';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
+import Context from '../context/Context.jsx';
+import { useContext } from 'react'
+import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 
 function ViewProfile() {
   const [profileDetails, setProfileDetails] = useState(null);
   const [loading, setLoading] = useState(true);
+    const context = useContext(Context);
+  const user = useSelector((state) => state?.user?.user);
+  const navigate = useNavigate();
+ 
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -89,9 +97,17 @@ function ViewProfile() {
         <div className="flex flex-col items-center mt-8">
           <div className="relative">
             <div className="w-32 h-32 rounded-full border-4 border-pink-500 bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-500 flex items-center justify-center overflow-hidden shadow-lg">
-              <svg className="w-28 h-28 text-gray-300" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 12c2.7 0 5-2.3 5-5s-2.3-5-5-5-5 2.3-5 5 2.3 5 5 5zm0 2c-3.3 0-10 1.7-10 5v3h20v-3c0-3.3-6.7-5-10-5z"/>
-              </svg>
+              {profileDetails?.data?.avatarUrl ? (
+                <img
+                  src={profileDetails.data.avatarUrl}
+                  alt="Avatar"
+                  className="w-28 h-28 object-cover rounded-full"
+                />
+              ) : (
+                <svg className="w-28 h-28 text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 12c2.7 0 5-2.3 5-5s-2.3-5-5-5-5 2.3-5 5 2.3 5 5 5zm0 2c-3.3 0-10 1.7-10 5v3h20v-3c0-3.3-6.7-5-10-5z"/>
+                </svg>
+              )}
             </div>
             <div className="absolute bottom-2 right-2 bg-white rounded-full p-1 border border-gray-300">
               <svg className="w-6 h-6 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
@@ -102,7 +118,7 @@ function ViewProfile() {
           <h1 className="text-2xl font-bold mt-4 text-gray-900">{profileDetails?.data?.username}</h1>
           <div className="flex gap-8 mt-4 text-center">
             <div>
-              <span className="block text-lg font-semibold text-gray-900">0</span>
+              <span className="block text-lg font-semibold text-gray-900">{user.friends.length || 0}</span>
               <span className="block text-xs text-gray-500">Friends</span>
             </div>
           </div>

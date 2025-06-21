@@ -26,6 +26,7 @@ function Home() {
    const context = useContext(Context);
    const user = useSelector((state) => state?.user?.user);
  
+   
   React.useEffect(() => {
   setShowAvatar(user?.avatarUrl);
   }, [user]);

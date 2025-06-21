@@ -55,7 +55,8 @@ import Chatting from '../pages/Chatting.jsx';
          },{
           path: "chatting",
           element: <Chatting/>
-         }
+        }
+
       ]
     },
   ]);

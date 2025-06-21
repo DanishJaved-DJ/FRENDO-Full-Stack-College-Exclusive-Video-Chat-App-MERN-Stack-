@@ -193,6 +193,15 @@ socket.on("reject-friend-call", ({ from }) => {
   console.log(`[FriendCall] ${socket.id} rejected call from ${from}`);
 });
 
+// Example: When user wants to leave queue and go home
+socket.on("leave-queue", () => {
+  const idx = queue.indexOf(socket.id);
+  if (idx !== -1) queue.splice(idx, 1); // Remove from queue
+  matches.delete(socket.id); // Remove any match
+  console.log(`[Queue] ${socket.id} left queue and redirected to /home`);
+  console.log(queue);
+});
+
     socket.on("disconnect", () => {
       console.log(`[Socket] Disconnected: ${socket.id}`);
       onlineUsers.delete(socket.id);

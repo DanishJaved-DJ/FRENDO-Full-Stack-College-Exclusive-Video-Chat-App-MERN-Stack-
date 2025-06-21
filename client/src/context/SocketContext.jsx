@@ -33,6 +33,7 @@ export const SocketProvider = ({ userData, children }) => {
     });
 
     s.on("match-confirmed", ({ partner }) => {
+      setMatch((prev) => ({ ...prev, user: partner }));
       console.log("Match confirmed with:", partner);
     });
 
