@@ -89,10 +89,10 @@ const Home = () => {
             >
               <img
                 src={
-                  match.user.avatarUrl ||
-                  `https://i.pravatar.cc/150?u=${match.user.userId}`
+                  match.user?.avatarUrl ||
+                  `https://i.pravatar.cc/150?u=${match.user?.username || "default"}`
                 }
-                alt={match.user.username}
+                alt={match.user?.username}
                 className={`rounded-full border-4 w-48 h-48 object-cover shadow-xl transition-all duration-700
                   ${
                     isAccepted && isPartnerAccepted

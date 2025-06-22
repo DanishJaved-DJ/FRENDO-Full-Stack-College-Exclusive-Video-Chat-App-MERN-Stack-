@@ -9,8 +9,6 @@ export const SocketProvider = ({ userData, children }) => {
   const [socket, setSocket] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [match, setMatch] = useState(null);
-  const [incomingSignal, setIncomingSignal] = useState(null);
- 
 
   useEffect(() => {
     if (!userData) return;
@@ -20,7 +18,6 @@ export const SocketProvider = ({ userData, children }) => {
     s.emit("user-online", userData);
 
     s.on("active-user-count", (count) => {
-      console.log("Active users:", count);
       setActiveUsers(count);
     });
 
@@ -34,30 +31,23 @@ export const SocketProvider = ({ userData, children }) => {
 
     s.on("match-confirmed", ({ partner }) => {
       setMatch((prev) => ({ ...prev, user: partner }));
-      console.log("Match confirmed with:", partner);
     });
 
     s.on("partner-decline", () => {
-      // alert("Partner declined. Searching again...");
       s.emit("join-queue");
     });
 
     s.on("partner-skipped", () => {
-      // alert("Partner skipped.");
       s.emit("join-queue");
     });
 
-    s.on("signal", ({ from, signal, user }) => {
-      setIncomingSignal({ from, signal, user });
-    });
-
-  
+    // NOTE: No more .on('signal') or incomingSignal state.
 
     return () => s.disconnect();
   }, [userData]);
 
   return (
-    <SocketContext.Provider value={{ activeUsers, socket, onlineUsers, match, setMatch, incomingSignal }}>
+    <SocketContext.Provider value={{ activeUsers, socket, onlineUsers, match, setMatch }}>
       {children}
     </SocketContext.Provider>
   );

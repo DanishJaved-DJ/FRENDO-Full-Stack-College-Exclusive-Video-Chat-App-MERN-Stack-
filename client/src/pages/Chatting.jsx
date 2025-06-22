@@ -22,10 +22,7 @@ const ChatBox = () => {
 
   const [friendRequestResponse, setFriendRequestResponse] = useState(false);
   const navigate = useNavigate();
-
-  console.log("Match data:", match);
-  
-
+  // console.log("Match data:", match);
   const handleSkip = () => {
     socket.emit("skip");
   };   

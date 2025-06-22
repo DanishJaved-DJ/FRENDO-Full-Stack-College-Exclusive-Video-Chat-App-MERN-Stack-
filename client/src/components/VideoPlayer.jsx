@@ -1,23 +1,30 @@
 import React, { useEffect, useRef, useState } from "react";
-import SimplePeer from "simple-peer";
 import { useSocket } from "../context/SocketContext";
 import { toast } from "sonner";
 import { BsCameraVideoFill, BsCameraVideoOff } from "react-icons/bs";
 import { FaVolumeMute } from "react-icons/fa";
 import { GiSpeaker } from "react-icons/gi";
 
-const VideoPlayer = () => {
+const ICE_SERVERS = {
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" }
+  ]
+};
+
+const VideoPlayerRaw = () => {
   const { socket, match } = useSocket();
   const localRef = useRef(null);
   const remoteRef = useRef(null);
-  const [peer, setPeer] = useState(null);
+  const pcRef = useRef(null);
   const [stream, setStream] = useState(null);
   const [isMicOn, setMicOn] = useState(true);
   const [isCamOn, setCamOn] = useState(true);
   const [callStartTime, setCallStartTime] = useState(null);
   const [duration, setDuration] = useState("00:00");
 
-  // Call timer
+  // ICE candidate queueing for out-of-order arrival
+  const remoteCandidatesQueue = useRef([]);
+
   useEffect(() => {
     if (!callStartTime) return;
     const interval = setInterval(() => {
@@ -32,91 +39,152 @@ const VideoPlayer = () => {
   useEffect(() => {
     if (!socket || !match?.socketId) return;
 
-    // Check browser compatibility
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      toast.error("🚫 Your browser doesn't support video/audio.");
-      console.error("getUserMedia is not supported by this browser.");
-      return;
-    }
+    let localStream, pc;
+    let cleanupFns = [];
 
-    let p;
+    let isOfferer = socket.id > match.socketId; // One is always offerer, one answerer
 
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then((currentStream) => {
+      .then(async (currentStream) => {
+        localStream = currentStream;
         setStream(currentStream);
         if (localRef.current) {
           localRef.current.srcObject = currentStream;
         }
 
-        const initiator = String(socket.id) < String(match.socketId);
-        console.log(`[Peer] This client is ${initiator ? "initiator" : "receiver"}`);
+        pc = new RTCPeerConnection(ICE_SERVERS);
+        pcRef.current = pc;
 
-        p = new SimplePeer({
-          initiator,
-          trickle: false,
-          stream: currentStream,
+        // Add all local tracks to the connection
+        localStream.getTracks().forEach(track => {
+          pc.addTrack(track, localStream);
         });
 
-        p.on("signal", (signal) => {
-          console.log("[Signal] Sending to:", match.socketId, signal);
-          socket.emit("signal", { to: match.socketId, signal });
-        });
-
-        p.on("stream", (remoteStream) => {
-          console.log("[Stream] Received remote stream");
+        // Set up ontrack handler
+        pc.ontrack = (event) => {
           if (remoteRef.current) {
-            remoteRef.current.srcObject = remoteStream;
-            remoteRef.current.onloadedmetadata = () => {
-              remoteRef.current.play().catch((err) => {
-                console.error("Autoplay error:", err);
-                toast.error("🔇 Autoplay blocked. Click to unmute.");
-              });
-            };
+            remoteRef.current.srcObject = event.streams[0];
+            setCallStartTime(Date.now());
+            // toast.success("✅ Call connected!");
           }
-          setCallStartTime(Date.now());
-          toast.success("📞 Call started");
-        });
+        };
 
-        p.on("close", () => {
-          toast.error("📴 Call ended");
-          setPeer(null);
+        // ICE candidate collection
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            socket.emit("webrtc-candidate", {
+              to: match.socketId,
+              candidate: event.candidate
+            });
+          }
+        };
+
+        // Only the offerer creates and sends the offer
+        if (isOfferer) {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socket.emit("webrtc-offer", { to: match.socketId, offer });
+        }
+
+        // --- Signaling event handlers with state checks and candidate queueing ---
+        const handleOffer = async ({ from, offer }) => {
+          if (from !== match.socketId) return;
+          if (pc.signalingState !== "stable") {
+            console.warn("Offer ignored: Not in 'stable' state.", pc.signalingState);
+            return;
+          }
+          await pc.setRemoteDescription(new RTCSessionDescription(offer));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          socket.emit("webrtc-answer", { to: match.socketId, answer });
+
+          // Apply any queued ICE candidates
+          remoteCandidatesQueue.current.forEach(candidate =>
+            pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {})
+          );
+          remoteCandidatesQueue.current = [];
+        };
+
+        const handleAnswer = async ({ from, answer }) => {
+          if (from !== match.socketId) return;
+          if (pc.signalingState !== "have-local-offer") {
+            console.warn("Answer ignored: Not in 'have-local-offer' state.", pc.signalingState);
+            return;
+          }
+          await pc.setRemoteDescription(new RTCSessionDescription(answer));
+
+          // Apply any queued ICE candidates
+          remoteCandidatesQueue.current.forEach(candidate =>
+            pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {})
+          );
+          remoteCandidatesQueue.current = [];
+        };
+
+        const handleCandidate = async ({ from, candidate }) => {
+          if (from !== match.socketId) return;
+          if (!pc.remoteDescription || !pc.remoteDescription.type) {
+            // Queue until remoteDescription is set
+            remoteCandidatesQueue.current.push(candidate);
+          } else {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (e) {
+              // ignore duplicate/invalid candidates
+            }
+          }
+        };
+
+        const handlePartnerDisconnect = () => {
+          toast.error("❌ Your partner has disconnected.");
+          pc.close();
+        };
+
+        socket.on("webrtc-offer", handleOffer);
+        socket.on("webrtc-answer", handleAnswer);
+        socket.on("webrtc-candidate", handleCandidate);
+        socket.on("partner-disconnect", handlePartnerDisconnect);
+
+        cleanupFns = [
+          () => socket.off("webrtc-offer", handleOffer),
+          () => socket.off("webrtc-answer", handleAnswer),
+          () => socket.off("webrtc-candidate", handleCandidate),
+          () => socket.off("partner-disconnect", handlePartnerDisconnect),
+        ];
+
+        // Clean up
+        return () => {
+          pc.close();
+          localStream?.getTracks().forEach(track => track.stop());
+          cleanupFns.forEach(fn => fn());
+          setStream(null);
+          pcRef.current = null;
           setCallStartTime(null);
           setDuration("00:00");
-        });
-
-        p.on("error", (err) => {
-          console.error("Peer error:", err);
-        });
-
-        socket.on("signal", ({ from, signal }) => {
-          if (from === match.socketId) {
-            console.log("[Signal] Received from:", from, signal);
-            p.signal(signal);
-          }
-        });
-
-        socket.on("partner-disconnect", () => {
-          toast.error("❌ Partner disconnected");
-          p.destroy();
-        });
-
-        setPeer(p);
+          if (localRef.current) localRef.current.srcObject = null;
+          if (remoteRef.current) remoteRef.current.srcObject = null;
+        };
       })
       .catch((err) => {
-        toast.error(`🚫 ${err.name}: ${err.message}`);
-        console.error("getUserMedia error:", err);
+        if (err.name === "NotAllowedError") {
+          toast.error("🚫 Camera/Mic access denied. Please enable permissions in your browser.");
+        } else {
+          toast.error(`🚫 Error accessing camera/mic: ${err.message}`);
+        }
       });
 
+    // Unmount effect: forcibly clean up
     return () => {
-      p?.destroy();
-      stream?.getTracks().forEach((t) => t.stop());
-      socket.off("signal");
-      socket.off("partner-disconnect");
+      try { pc && pc.close(); } catch {}
+      try { localStream && localStream.getTracks().forEach(t => t.stop()); } catch {}
+      cleanupFns.forEach(fn => fn());
       setStream(null);
-      setPeer(null);
+      pcRef.current = null;
       setCallStartTime(null);
       setDuration("00:00");
+      if (localRef.current) localRef.current.srcObject = null;
+      if (remoteRef.current) remoteRef.current.srcObject = null;
     };
+
   }, [socket, match?.socketId]);
 
   const toggleMic = () => {
@@ -125,7 +193,7 @@ const VideoPlayer = () => {
     if (audioTrack) {
       audioTrack.enabled = !audioTrack.enabled;
       setMicOn(audioTrack.enabled);
-      toast(audioTrack.enabled ? "🎙️ Mic unmuted" : "🔇 Mic muted");
+      // toast(audioTrack.enabled ? "🎙️ Mic is ON" : "🔇 Mic is OFF");
     }
   };
 
@@ -135,7 +203,7 @@ const VideoPlayer = () => {
     if (videoTrack) {
       videoTrack.enabled = !videoTrack.enabled;
       setCamOn(videoTrack.enabled);
-      toast(videoTrack.enabled ? "📷 Camera on" : "🚫 Camera off");
+      // toast(videoTrack.enabled ? "📷 Camera is ON" : "🚫 Camera is OFF");
     }
   };
 
@@ -147,6 +215,7 @@ const VideoPlayer = () => {
           autoPlay
           playsInline
           className="w-full h-full object-cover rounded-3xl"
+          onClick={() => remoteRef.current?.play().catch(() => {})}
         />
         <video
           ref={localRef}
@@ -163,6 +232,7 @@ const VideoPlayer = () => {
           className={`transition-all bg-white/80 hover:bg-pink-100 rounded-full p-3 shadow-lg border-2 border-pink-200 text-xl ${
             isMicOn ? "text-pink-500" : "text-gray-400"
           }`}
+          aria-label={isMicOn ? "Mute microphone" : "Unmute microphone"}
         >
           {isMicOn ? <GiSpeaker /> : <FaVolumeMute />}
         </button>
@@ -171,6 +241,7 @@ const VideoPlayer = () => {
           className={`transition-all bg-white/80 hover:bg-purple-100 rounded-full p-3 shadow-lg border-2 border-purple-200 text-xl ${
             isCamOn ? "text-purple-500" : "text-gray-400"
           }`}
+          aria-label={isCamOn ? "Turn off camera" : "Turn on camera"}
         >
           {isCamOn ? <BsCameraVideoFill /> : <BsCameraVideoOff />}
         </button>
@@ -182,4 +253,4 @@ const VideoPlayer = () => {
   );
 };
 
-export default VideoPlayer;
+export default VideoPlayerRaw;

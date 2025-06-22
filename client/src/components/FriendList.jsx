@@ -34,57 +34,8 @@ const FriendList = () => {
     fetchFriends();
   }, []);
   
-  
-  // useEffect(() => {
-  //   socket.on("incoming-friend-call", ({ from, user }) => {
-  //     console.log("Incoming call from:", user.username);
-  //     setIncomingCall({ from, user });
-  //   });
-
-  //   socket.on("friend-call-rejected", ({ user }) => {
-  //     alert(`${user.username} rejected your call`);
-  //   });
-
-  //   socket.on("friend-call-timeout", ({ message }) => {
-  //     alert(message || "Call timed out");
-  //   });
-
-  //   socket.on("match-confirmed", ({ partner }) => {
-  //     console.log("Matched with:", partner);
-  //     // Redirect to chat/call screen if needed
-  //   });
-
-  //   return () => {
-  //     socket.off("incoming-friend-call");
-  //     socket.off("friend-call-rejected");
-  //     socket.off("friend-call-timeout");
-  //     socket.off("match-confirmed");
-  //   };
-  // }, []);
-
-    const handleCall = (toSocketId) => {
-    socket.emit("friend-call", { to: toSocketId });
-  };
-
-  const acceptCall = () => {
-    socket.emit("accept-friend-call", { from: incomingCall.from });
-    setIncomingCall(null);
-  };
-
-  const rejectCall = () => {
-    socket.emit("reject-friend-call", { from: incomingCall.from });
-    setIncomingCall(null);
-  };
-  
   return (
     <div>
-      {incomingCall && (
-        <CallNotification
-          user={incomingCall.user}
-          acceptCall={acceptCall}
-          rejectCall={rejectCall}
-        />
-      )}
       <div className="flex items-center px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-pink-100 via-purple-100 to-yellow-100">
         <TbFriends className="text-3xl text-pink-500 mr-3" />
         <h2 className="text-xl font-bold text-gray-800 tracking-tight">Friends</h2>
