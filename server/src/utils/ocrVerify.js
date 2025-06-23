@@ -1,18 +1,27 @@
-import Tesseract from 'tesseract.js';
-import sharp from 'sharp';
-import fs from 'fs';
+import Tesseract from "tesseract.js";
+import sharp from "sharp";
+import axios from "axios";
 
-export const extractTextFromImage = async (imagePath) => {
-  const processedImagePath = imagePath.replace(/\.(jpg|jpeg|png)$/, '_processed.png');
+export const extractTextFromImage = async (imageUrl) => {
+  try {
+    // ✅ 1. Download image as buffer
+    const response = await axios.get(imageUrl, { responseType: "arraybuffer" });
+    const inputBuffer = Buffer.from(response.data);
 
-  await sharp(imagePath)
-    .grayscale()
-    .normalize()
-    .toFile(processedImagePath);
+    // ✅ 2. Preprocess with sharp (in memory)
+    const processedBuffer = await sharp(inputBuffer)
+      .grayscale()
+      .normalize()
+      .png()
+      .toBuffer();
 
-  const { data: { text } } = await Tesseract.recognize(processedImagePath, 'eng');
+    // ✅ 3. OCR on processed buffer
+    const result = await Tesseract.recognize(processedBuffer, "eng");
 
-  fs.unlinkSync(processedImagePath); // cleanup
+    return result.data.text;
 
-  return text;
+  } catch (err) {
+    console.error("OCR extraction failed:", err);
+    return "";
+  }
 };

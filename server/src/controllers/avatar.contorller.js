@@ -1,48 +1,54 @@
-
-import { log } from "console";
 import User from "../models/user.models.js";
-import uploadOnCloudinary from "../utils/cloudinary.js";
+import uploadOnCloudinary from "../utils/cloudinary.js"; // buffer-based upload util
 import cloudinary from "cloudinary";
+
 
 const uploadAvatar = async (req, res) => {
   try {
-    // Check if user is authenticated
+    // ✅ Auth check
     if (!req.user || !req.user._id) {
-      return res.status(401).json({ status: 'false', message: 'Unauthorized: User not authenticated' });
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
-    // Fetch user from database
+    // ✅ Fetch user
     const user = await User.findById(req.user._id);
-
-    console.log("User found in uploadAvatar:", user);
     if (!user) {
-      return res.status(404).json({ status: 'false', message: 'User not found' });
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    // Delete old avatar if it exists
+    // ✅ Delete old avatar from Cloudinary (if exists)
     if (user.avatarPublicId) {
       await cloudinary.uploader.destroy(user.avatarPublicId);
     }
 
-    // Save new avatar details
-    let avatarUrlLocalFile = req.file?.path;
-    user.avatarPublicId = req.file?.filename; // public_id from Cloudinary
+    // ✅ Upload new avatar from memory buffer
+    const fileBuffer = req.file?.buffer;
+    if (!fileBuffer) {
+      return res.status(400).json({ success: false, message: "No image file uploaded" });
+    }
 
-    const uploadResponse = await uploadOnCloudinary(avatarUrlLocalFile);
-    if (uploadResponse) {
-      user.avatarUrl = uploadResponse.secure_url;
+    const uploadResponse = await uploadOnCloudinary(fileBuffer, "avatars"); // folder optional
+
+    if (!uploadResponse) {
+      return res.status(500).json({ success: false, message: "Failed to upload to Cloudinary" });
     }
-    else {
-      return res.status(500).json({ status: 'false', message: 'Failed to upload avatar to Cloudinary' });
-    }
+
+    // ✅ Save new avatar details
+    user.avatarUrl = uploadResponse.secure_url;
+    user.avatarPublicId = uploadResponse.public_id;
     await user.save();
-    console.log("Avatar uploaded successfully:", user.avatarUrl);
-    
-    res.json({ success: true, message: "Avatar uploaded successfully", avatarUrl: user.avatarUrl });
+
+    // ✅ Success response
+    res.status(200).json({
+      success: true,
+      message: "Avatar uploaded successfully",
+      avatarUrl: user.avatarUrl,
+    });
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Avatar upload failed" });
+    console.error("[Upload Avatar Error]", err);
+    res.status(500).json({ success: false, message: "Avatar upload failed" });
   }
-}
+};
 
 export default uploadAvatar;

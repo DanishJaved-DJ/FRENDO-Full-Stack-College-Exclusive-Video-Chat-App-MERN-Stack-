@@ -1,21 +1,10 @@
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
 
-const uploadDir = './uploads';
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir);
-}
+// ✅ Memory storage avoids using file system
+const storage = multer.memoryStorage();
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
-  }
-});
-
+// ✅ Optional: still use file filter for images
 const fileFilter = (req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
   const allowed = ['.jpg', '.jpeg', '.png'];
@@ -23,4 +12,5 @@ const fileFilter = (req, file, cb) => {
   else cb(new Error('Only image files are allowed'), false);
 };
 
+// ✅ Export middleware
 export const upload = multer({ storage, fileFilter });
