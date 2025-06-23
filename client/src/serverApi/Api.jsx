@@ -1,4 +1,4 @@
-const backendDomain = process.env.REACT_APP_BACKEND_DOMAIN ;
+const backendDomain = import.meta.env.VITE_BACKEND_DOMAIN;
 
 const Api={
     Signup : {
