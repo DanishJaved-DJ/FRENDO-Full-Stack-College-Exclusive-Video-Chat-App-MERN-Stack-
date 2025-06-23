@@ -25,8 +25,8 @@ export const login = async (req, res) => {
     // Set token in HTTP-only cookie
     res.cookie('token', token, {
       httpOnly: true,
-      secure: true, // true on HTTPS
-      sameSite: 'none', // Adjust based on your needs
+      secure: true,
+      sameSite: 'None',
     });
 
     res.status(200).json({
