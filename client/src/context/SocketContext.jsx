@@ -12,7 +12,10 @@ export const SocketProvider = ({ userData, children }) => {
 
   useEffect(() => {
     if (!userData) return;
-    const s = io("http://localhost:3000");
+    const s = io(import.meta.env.VITE_BACKEND_DOMAIN, {
+      transports: ["websocket"],
+      auth: { token: userData.token },
+    });
     setSocket(s);
 
     s.emit("user-online", userData);
