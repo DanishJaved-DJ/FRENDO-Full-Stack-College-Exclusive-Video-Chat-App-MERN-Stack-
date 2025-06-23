@@ -1,4 +1,4 @@
-const backendDomain = "http://localhost:3000";
+const backendDomain = process.env.REACT_APP_BACKEND_DOMAIN ;
 
 const Api={
     Signup : {
