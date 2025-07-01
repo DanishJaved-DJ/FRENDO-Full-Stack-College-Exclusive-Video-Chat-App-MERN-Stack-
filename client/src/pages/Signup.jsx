@@ -7,6 +7,7 @@ import { Toaster, toast } from 'sonner';
 function Signup() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [isSigningUp, setIsSigningUp] = useState(false);
   const [form, setForm] = useState({
     username: '',
     email: '',
@@ -37,9 +38,10 @@ function Signup() {
 
 const handleSubmit = async (e) => {
   e.preventDefault();
-
+setIsSigningUp(true);
   if (form.password !== form.confirmPassword) {
     toast.error("Password and confirm password do not match.");
+    setIsSigningUp(false);
     return;
   }
 
@@ -160,7 +162,7 @@ const handleSubmit = async (e) => {
             type="submit"
             className="w-full bg-gradient-to-r from-yellow-400 via-pink-500 to-purple-500 text-white font-bold py-2 rounded mt-2 hover:opacity-90 transition duration-200 text-base"
           >
-            Sign Up
+            {isSigningUp ? "Signing up..." : "Sign Up"}
           </button>
         </form>
         <div className="mt-6 w-full border-t border-gray-200 pt-4 text-center">

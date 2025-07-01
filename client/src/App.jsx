@@ -35,23 +35,30 @@ function App() {
     <Context.Provider value={{fetchUserDetails}}>
       <SocketProvider userData={userData}>
         <Toaster
-          position="top-right"
-          theme="light" // or "dark" — can also follow system theme
-          richColors // adds colorful variants to success/error/info
-          closeButton // show a close icon
-          duration={4000} // time before auto-dismiss (ms)
-          offset={16} // spacing from edge
+          position="top-center"
+          theme="light"
+          richColors
+          closeButton
+          duration={2000}
           toastOptions={{
             classNames: {
-              toast: "rounded-xl shadow-lg border border-zinc-200 dark:border-zinc-800",
-              description: "text-sm text-muted-foreground",
+              toast: "rounded-2xl shadow-xl border-none bg-white/90 dark:bg-zinc-900/90 text-black dark:text-white px-6 py-4 flex items-center gap-3 font-semibold text-base",
+              description: "text-sm text-zinc-600 dark:text-zinc-300",
+              actionButton: "bg-transparent text-blue-500 font-bold hover:underline",
+              cancelButton: "bg-transparent text-zinc-400 hover:text-zinc-600",
+              icon: "rounded-full bg-gradient-to-tr from-pink-500 via-red-500 to-yellow-500 text-white p-2 mr-2 shadow-md",
+              closeButton: "text-zinc-400 hover:text-zinc-600",
+            },
+            style: {
+              boxShadow: "0 4px 24px 0 rgba(0,0,0,0.12)",
+              borderRadius: "18px",
+              border: "none",
             },
           }}
         />
         <main>
           <Outlet />
         </main>
-  
       </SocketProvider>
     </Context.Provider>
   )

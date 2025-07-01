@@ -7,6 +7,7 @@ import Context from '../context/Context.jsx';
 
 function Login() {
     const [showPassword, setShowPassword] = useState(false);
+    const [isLogging , setIsLogging] = useState(false);
     const [data, setData] = useState({
         email: "",
         password: ""
@@ -24,6 +25,7 @@ function Login() {
 
     const handleSubmit =  async (e) => {
         e.preventDefault();
+        setIsLogging(true);
         const dataResponse = await fetch(Api.login.url, {
             method: Api.login.method,
             credentials: 'include',
@@ -37,10 +39,11 @@ function Login() {
         if (response.status === "success") {
             toast.success("Login successful");
             navigate('/home');
+            setIsLogging(false);
             generalContext.fetchUserDetails();
         } else {
             toast.error(response.message);
-            console.error("Login failed", response.message);
+            setIsLogging(false);
         }
     } 
 
@@ -91,7 +94,7 @@ function Login() {
                         type="submit"
                         className="w-full bg-gradient-to-r from-[#f9ce34] via-[#ee2a7b] to-[#6228d7] text-white font-bold py-2.5 rounded-lg mt-2 shadow-md hover:opacity-90 transition"
                     >
-                        Log In
+                        {isLogging ? "Logging in..." : "Login"}
                     </button>
                 </form>
                 <div className="w-full border-t border-gray-200 my-7"></div>

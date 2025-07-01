@@ -1,94 +1,76 @@
-const onlineUsers = new Map(); // socket.id => userData
+// === SOCKET SERVER (Refactored with Timeout & Mapping) ===
+
+const onlineUsers = new Map();         // socket.id => userData
+const userIdToSocket = new Map();      // userId => socket.id
+const socketToUserId = new Map();      // socket.id => userId
+const pendingCalls = new Map();        // fromSocketId => timeoutId
+
 const queue = [];
-const matches = new Map();
-const skipNextUserMap = new Map(); // socket.id => Set of socket ids to skip
+const matches = new Map();             // socket.id => partnerSocketId
+const skipNextUserMap = new Map();     // socket.id => Set of socket ids to skip
 
 export const setupSocket = (io) => {
   io.on("connection", (socket) => {
     console.log(`[Socket] New connection: ${socket.id}`);
 
-    // 1. User connected
+    // === USER ONLINE ===
     socket.on("user-online", (userData) => {
       socket.data = { ...userData, accepted: false };
       onlineUsers.set(socket.id, userData);
-      console.log(`[User] Online: ${userData.userId} (Socket: ${socket.id})`);
+      userIdToSocket.set(userData.userId, socket.id);
+      socketToUserId.set(socket.id, userData.userId);
 
       io.emit("active-user-count", onlineUsers.size);
-
-      const usersArr = Array.from(onlineUsers.entries()).map(([sid, data]) => ({
-        socketId: sid,
-        ...data,
-      }));
-      io.emit("friend-status-update", usersArr);
+      broadcastUserList(io);
     });
 
-    // 2. Join matchmaking queue
+    // === JOIN QUEUE ===
     socket.on("join-queue", () => {
       if (!queue.includes(socket.id)) {
         queue.push(socket.id);
-        console.log(`[Queue] Socket joined: ${socket.id}. Queue:`, queue);
         attemptMatch(io);
       }
     });
 
-    // 2b. Skip next user (by socket id)
+    // === SKIP NEXT USER ===
     socket.on("skip-next-user", (userSocketToSkip) => {
       if (!skipNextUserMap.has(socket.id)) {
         skipNextUserMap.set(socket.id, new Set());
       }
       skipNextUserMap.get(socket.id).add(userSocketToSkip);
-      console.log(`[SkipNextUser] ${socket.id} will skip next match with ${userSocketToSkip}`);
       attemptMatch(io);
     });
 
-    // 3. Accept/decline logic
+    // === ACCEPT MATCH ===
     socket.on("request-accept", () => {
       socket.data.accepted = true;
       const partner = matches.get(socket.id);
 
       if (partner) {
-        // Notify the partner that this user accepted
         io.to(partner).emit("partner-accepted", {
           user: onlineUsers.get(socket.id),
         });
 
-        // Check if both accepted
         if (io.sockets.sockets.get(partner)?.data?.accepted) {
           const userA = onlineUsers.get(socket.id);
           const userB = onlineUsers.get(partner);
-
           io.to(socket.id).emit("match-confirmed", { partner: userB });
           io.to(partner).emit("match-confirmed", { partner: userA });
-
-          console.log(`[Match] Confirmed: ${socket.id} <-> ${partner}`);
         }
       }
     });
 
+    // === DECLINE ===
     socket.on("request-decline", () => {
-      console.log(`[Match] ${socket.id} declined match`);
       handleSkipOrDecline(socket, io, "decline");
     });
 
+    // === SKIP ===
     socket.on("skip", () => {
-      console.log(`[Match] ${socket.id} skipped current match`);
       handleSkipWhileMatched(socket, io);
     });
 
-    // --- WebRTC RAW SIGNALING EVENTS ---
-    socket.on("webrtc-offer", ({ to, offer }) => {
-      io.to(to).emit("webrtc-offer", { from: socket.id, offer });
-    });
-
-    socket.on("webrtc-answer", ({ to, answer }) => {
-      io.to(to).emit("webrtc-answer", { from: socket.id, answer });
-    });
-
-    socket.on("webrtc-candidate", ({ to, candidate }) => {
-      io.to(to).emit("webrtc-candidate", { from: socket.id, candidate });
-    });
-    // -----------------------------------
-
+    // === FILE, MESSAGE ===
     socket.on("send-message", ({ to, message }) => {
       io.to(to).emit("receive-message", {
         from: socket.id,
@@ -97,50 +79,97 @@ export const setupSocket = (io) => {
       });
     });
 
-    socket.on("send-file", ({ to, fileUrl, fileType }) => {
+    socket.on("send-file", ({ to, fileUrl, fileType, fileName, fileSize }) => {
       io.to(to).emit("receive-file", {
         from: socket.id,
         user: onlineUsers.get(socket.id),
         fileUrl,
         fileType,
+        fileName,
+        fileSize,
+        time: Date.now(),
       });
     });
 
+    // === FRIEND REQUEST ===
     socket.on("send-friend-request", ({ to }) => {
-      io.to(to).emit("friend-request-received", {
+      const toSocketId = userIdToSocket.get(to);
+      io.to(toSocketId).emit("friend-request-received", {
         from: socket.id,
         user: onlineUsers.get(socket.id),
       });
     });
 
     socket.on("friend-response", ({ to, accepted }) => {
-      const fromUser = onlineUsers.get(socket.id);
-      io.to(to).emit("friend-response-received", {
+      const toSocketId = userIdToSocket.get(to);
+      io.to(toSocketId).emit("friend-response-received", {
         from: socket.id,
         accepted,
-        user: fromUser,
+        user: onlineUsers.get(socket.id),
       });
     });
 
-    // Exit queue
+    // === FRIEND CALL ===
+    socket.on("friend-call", ({ to }) => {
+      const toSocketId = userIdToSocket.get(to );
+      const fromUser = onlineUsers.get(socket.id);
+      const toUser = onlineUsers.get(toSocketId);
+      console.log("onlineUsers", toSocketId, fromUser, to, socket.id, toUser);
+
+
+      if (!fromUser || !toUser) return;
+
+      io.to(toSocketId).emit("incoming-friend-call", {
+        from: socket.id,
+        user: fromUser,
+      });
+
+      const timeoutId = setTimeout(() => {
+        io.to(socket.id).emit("friend-call-timeout", {
+          message: "Call timed out. No response from friend.",
+        });
+        pendingCalls.delete(socket.id);
+      }, 30000);
+
+      pendingCalls.set(socket.id, timeoutId);
+    });
+
+    socket.on("accept-friend-call", ({ from }) => {
+      matches.set(socket.id, from);
+      matches.set(from, socket.id);
+      clearTimeout(pendingCalls.get(from));
+      pendingCalls.delete(from);
+
+      const userA = onlineUsers.get(socket.id);
+      const userB = onlineUsers.get(from);
+      io.to(from).emit("match-confirmed", { partner: userA });
+      io.to(socket.id).emit("match-confirmed", { partner: userB });
+    });
+
+    socket.on("reject-friend-call", ({ from }) => {
+      clearTimeout(pendingCalls.get(from));
+      pendingCalls.delete(from);
+      io.to(from).emit("friend-call-rejected", {
+        user: onlineUsers.get(socket.id),
+      });
+    });
+
+    // === LEAVE QUEUE ===
     socket.on("leave-queue", () => {
       const idx = queue.indexOf(socket.id);
       if (idx !== -1) queue.splice(idx, 1);
       matches.delete(socket.id);
-      console.log(`[Queue] ${socket.id} left queue and redirected to /home`);
-      console.log(queue);
     });
 
+    // === DISCONNECT ===
     socket.on("disconnect", () => {
-      console.log(`[Socket] Disconnected: ${socket.id}`);
+      const userId = socketToUserId.get(socket.id);
       onlineUsers.delete(socket.id);
-      io.emit("active-user-count", onlineUsers.size);
+      userIdToSocket.delete(userId);
+      socketToUserId.delete(socket.id);
 
-      const usersArr = Array.from(onlineUsers.entries()).map(([sid, data]) => ({
-        socketId: sid,
-        ...data,
-      }));
-      io.emit("friend-status-update", usersArr);
+      io.emit("active-user-count", onlineUsers.size);
+      broadcastUserList(io);
 
       handleSkipOrDecline(socket, io, "disconnect");
       skipNextUserMap.delete(socket.id);
@@ -148,32 +177,29 @@ export const setupSocket = (io) => {
   });
 };
 
-// Matchmaking
+// === HELPERS ===
+function broadcastUserList(io) {
+  const usersArr = Array.from(onlineUsers.entries()).map(([sid, data]) => ({
+    socketId: sid,
+    ...data,
+  }));
+  io.emit("friend-status-update", usersArr);
+}
+
 function attemptMatch(io) {
   if (queue.length >= 2) {
     for (let i = 0; i < queue.length; i++) {
       for (let j = i + 1; j < queue.length; j++) {
         const a = queue[i];
         const b = queue[j];
-        const aSkips = skipNextUserMap.get(a)?.has(b);
-        const bSkips = skipNextUserMap.get(b)?.has(a);
-
-        if (!aSkips && !bSkips) {
+        if (!skipNextUserMap.get(a)?.has(b) && !skipNextUserMap.get(b)?.has(a)) {
           queue.splice(j, 1);
           queue.splice(i, 1);
           matches.set(a, b);
           matches.set(b, a);
 
-          io.to(a).emit("match-found", {
-            partnerSocket: b,
-            partnerData: onlineUsers.get(b),
-          });
-          io.to(b).emit("match-found", {
-            partnerSocket: a,
-            partnerData: onlineUsers.get(a),
-          });
-
-          console.log(`[Matchmaking] Match found: ${a} <-> ${b}`);
+          io.to(a).emit("match-found", { partnerSocket: b, partnerData: onlineUsers.get(b) });
+          io.to(b).emit("match-found", { partnerSocket: a, partnerData: onlineUsers.get(a) });
           return;
         }
       }
@@ -196,13 +222,10 @@ function handleSkipWhileMatched(socket, io) {
     matches.delete(partner);
     matches.delete(socket.id);
     queue.push(partner, socket.id);
-
     attemptMatch(io);
-  } else {
-    if (!queue.includes(socket.id)) {
-      queue.push(socket.id);
-      attemptMatch(io);
-    }
+  } else if (!queue.includes(socket.id)) {
+    queue.push(socket.id);
+    attemptMatch(io);
   }
 }
 

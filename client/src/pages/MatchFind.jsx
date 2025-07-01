@@ -3,7 +3,6 @@ import { useSocket } from "../context/SocketContext";
 import MatchModal from "../components/MatchModal.jsx";
 import ChatBox from "../components/ChatBox.jsx";
 import VideoPlayer from "../components/VideoPlayer.jsx";
-import FileShare from "../components/FileShare.jsx";
 import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import { FaArrowRight } from "react-icons/fa6";
@@ -89,10 +88,10 @@ const Home = () => {
             >
               <img
                 src={
-                  match.user?.avatarUrl ||
-                  `https://i.pravatar.cc/150?u=${match.user?.username || "default"}`
+                  match?.user?.avatarUrl ||
+                  `https://i.pravatar.cc/150?u=${match?.user?.username || "default"}`
                 }
-                alt={match.user?.username}
+                alt={match?.user?.username}
                 className={`rounded-full border-4 w-48 h-48 object-cover shadow-xl transition-all duration-700
                   ${
                     isAccepted && isPartnerAccepted
@@ -111,7 +110,7 @@ const Home = () => {
               />
               <div className="flex flex-col justify-center bg-white/70 rounded-2xl p-8 shadow-lg transition-all duration-500">
                 <div className="flex text-xl font-semibold gap-2 mb-4">
-                  <span className="text-pink-500 font-bold text-2xl text-center">{match.user.username}</span>
+                  <span className="text-pink-500 font-bold text-2xl text-center">{match?.user?.username}</span>
                 </div>
                 <div className="flex text-lg font-medium gap-2 mb-2">
                   <span className="text-gray-700">I Speak:</span>
@@ -121,9 +120,9 @@ const Home = () => {
                  <div>
               <span className="font-semibold ">Hobbies:</span>
               <span className="ml-2 text-gray-700">
-                {match.user.hobbies && match.user.hobbies.length > 0 ? (
+                {match?.user?.hobbies && match?.user?.hobbies.length > 0 ? (
                   <div className="flex flex-col gap-1 mt-2">
-                    {match.user.hobbies.map((hobby, idx) => (
+                    {match?.user?.hobbies.map((hobby, idx) => (
                       <div key={idx} className="bg-blue-100 rounded px-2 py-1  font-semibold uppercase text-[#d75c28] w-fit">
                         {hobby}
                       </div>

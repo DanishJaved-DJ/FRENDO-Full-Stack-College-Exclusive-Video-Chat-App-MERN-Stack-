@@ -32,7 +32,11 @@ const Api={
     getFriends : {
         url: `${backendDomain}/api/v1/users/get-friends`,
         method: "GET",
-        }
+    },
+    fileShareApi : {
+        url: `${backendDomain}/api/v1/users/upload`,
+        method: "POST",
+    },
 };
 
 export default Api;

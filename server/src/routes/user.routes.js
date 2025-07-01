@@ -11,6 +11,7 @@ import  uploadAvatar  from "../controllers/avatar.contorller.js";
 import { sendFriendRequest } from "../controllers/SendFriendRequest.js";
 import { respondToFriendRequest } from "../controllers/responseToFriendRequest.js";
 import { getFriends } from "../controllers/getFriends.controller.js";
+import { shareFile } from "../controllers/shareFile.controller.js";
 
 
 const router=Router();
@@ -26,5 +27,7 @@ router.put('/avatar', authMiddleware, upload.single("avatarUrl"), uploadAvatar);
 router.post('/friend-request', authMiddleware, sendFriendRequest);
 router.post('/friend-response', authMiddleware, respondToFriendRequest);
 router.get('/get-friends', authMiddleware, getFriends);
+
+router.post('/upload', upload.single("file"), shareFile);
 
 export default router;
