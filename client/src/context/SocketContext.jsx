@@ -44,7 +44,6 @@ export const SocketProvider = ({ userData, children }) => {
       s.emit("join-queue");
     });
 
-    // NOTE: No more .on('signal') or incomingSignal state.
 
     return () => s.disconnect();
   }, [userData]);

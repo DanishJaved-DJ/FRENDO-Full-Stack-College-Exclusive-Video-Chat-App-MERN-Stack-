@@ -5,11 +5,7 @@ import { BsCameraVideoFill, BsCameraVideoOff } from "react-icons/bs";
 import { FaVolumeMute } from "react-icons/fa";
 import { GiSpeaker } from "react-icons/gi";
 
-const ICE_SERVERS = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" }
-  ]
-};
+const ICE_SERVERS = { iceServers: [] }; // No STUN/TURN for now
 
 const VideoPlayerRaw = () => {
   const { socket, match } = useSocket();
@@ -21,8 +17,6 @@ const VideoPlayerRaw = () => {
   const [isCamOn, setCamOn] = useState(true);
   const [callStartTime, setCallStartTime] = useState(null);
   const [duration, setDuration] = useState("00:00");
-
-  // ICE candidate queueing for out-of-order arrival
   const remoteCandidatesQueue = useRef([]);
 
   useEffect(() => {
@@ -39,148 +33,112 @@ const VideoPlayerRaw = () => {
   useEffect(() => {
     if (!socket || !match?.socketId) return;
 
-    let localStream, pc;
-    let cleanupFns = [];
+    let localStream;
+    let pc = new RTCPeerConnection(ICE_SERVERS);
+    pcRef.current = pc;
 
-    let isOfferer = socket.id > match.socketId; // One is always offerer, one answerer
+    const start = async () => {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        setStream(localStream);
+        if (localRef.current) localRef.current.srcObject = localStream;
 
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then(async (currentStream) => {
-        localStream = currentStream;
-        setStream(currentStream);
-        if (localRef.current) {
-          localRef.current.srcObject = currentStream;
-        }
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-        pc = new RTCPeerConnection(ICE_SERVERS);
-        pcRef.current = pc;
-
-        // Add all local tracks to the connection
-        localStream.getTracks().forEach(track => {
-          pc.addTrack(track, localStream);
-        });
-
-        // Set up ontrack handler
         pc.ontrack = (event) => {
           if (remoteRef.current) {
             remoteRef.current.srcObject = event.streams[0];
             setCallStartTime(Date.now());
-            // toast.success("✅ Call connected!");
           }
         };
 
-        // ICE candidate collection
         pc.onicecandidate = (event) => {
           if (event.candidate) {
-            socket.emit("webrtc-candidate", {
+            socket.emit("webrtc-ice-candidate", {
               to: match.socketId,
-              candidate: event.candidate
+              candidate: event.candidate,
             });
           }
         };
 
-        // Only the offerer creates and sends the offer
+        const isOfferer = socket.id > match.socketId;
         if (isOfferer) {
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
           socket.emit("webrtc-offer", { to: match.socketId, offer });
         }
 
-        // --- Signaling event handlers with state checks and candidate queueing ---
+        // === SIGNALING HANDLERS ===
         const handleOffer = async ({ from, offer }) => {
           if (from !== match.socketId) return;
-          if (pc.signalingState !== "stable") {
-            console.warn("Offer ignored: Not in 'stable' state.", pc.signalingState);
-            return;
-          }
           await pc.setRemoteDescription(new RTCSessionDescription(offer));
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           socket.emit("webrtc-answer", { to: match.socketId, answer });
 
-          // Apply any queued ICE candidates
-          remoteCandidatesQueue.current.forEach(candidate =>
-            pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {})
-          );
+          // Drain ICE candidate queue
+          for (const cand of remoteCandidatesQueue.current) {
+            await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+          }
           remoteCandidatesQueue.current = [];
         };
 
         const handleAnswer = async ({ from, answer }) => {
           if (from !== match.socketId) return;
-          if (pc.signalingState !== "have-local-offer") {
-            console.warn("Answer ignored: Not in 'have-local-offer' state.", pc.signalingState);
-            return;
-          }
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
 
-          // Apply any queued ICE candidates
-          remoteCandidatesQueue.current.forEach(candidate =>
-            pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {})
-          );
+          for (const cand of remoteCandidatesQueue.current) {
+            await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+          }
           remoteCandidatesQueue.current = [];
         };
 
         const handleCandidate = async ({ from, candidate }) => {
           if (from !== match.socketId) return;
           if (!pc.remoteDescription || !pc.remoteDescription.type) {
-            // Queue until remoteDescription is set
             remoteCandidatesQueue.current.push(candidate);
           } else {
-            try {
-              await pc.addIceCandidate(new RTCIceCandidate(candidate));
-            } catch (e) {
-              // ignore duplicate/invalid candidates
-            }
+            await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
           }
         };
 
-        const handlePartnerDisconnect = () => {
-          toast.error("❌ Your partner has disconnected.");
+        const handleDisconnect = () => {
+          toast.error("❌ Partner disconnected.");
           pc.close();
         };
 
         socket.on("webrtc-offer", handleOffer);
         socket.on("webrtc-answer", handleAnswer);
-        socket.on("webrtc-candidate", handleCandidate);
-        socket.on("partner-disconnect", handlePartnerDisconnect);
+        socket.on("webrtc-ice-candidate", handleCandidate);
+        socket.on("partner-disconnect", handleDisconnect);
 
-        cleanupFns = [
-          () => socket.off("webrtc-offer", handleOffer),
-          () => socket.off("webrtc-answer", handleAnswer),
-          () => socket.off("webrtc-candidate", handleCandidate),
-          () => socket.off("partner-disconnect", handlePartnerDisconnect),
-        ];
-
-        // Clean up
         return () => {
+          socket.off("webrtc-offer", handleOffer);
+          socket.off("webrtc-answer", handleAnswer);
+          socket.off("webrtc-ice-candidate", handleCandidate);
+          socket.off("partner-disconnect", handleDisconnect);
           pc.close();
-          localStream?.getTracks().forEach(track => track.stop());
-          cleanupFns.forEach(fn => fn());
-          setStream(null);
-          pcRef.current = null;
-          setCallStartTime(null);
-          setDuration("00:00");
+          localStream?.getTracks().forEach(t => t.stop());
           if (localRef.current) localRef.current.srcObject = null;
           if (remoteRef.current) remoteRef.current.srcObject = null;
+          setStream(null);
+          setDuration("00:00");
+          setCallStartTime(null);
+          pcRef.current = null;
         };
-      })
-      .catch((err) => {
-        if (err.name === "NotAllowedError") {
-          toast.error("🚫 Camera/Mic access denied. Please enable permissions in your browser.");
-        } else {
-          toast.error(`🚫 Error accessing camera/mic: ${err.message}`);
-        }
-      });
+      } catch (err) {
+        toast.error("🚫 Cannot access camera/mic: " + err.message);
+      }
+    };
 
-    // Unmount effect: forcibly clean up
+    start();
+
     return () => {
       try { pc && pc.close(); } catch {}
-      try { localStream && localStream.getTracks().forEach(t => t.stop()); } catch {}
-      cleanupFns.forEach(fn => fn());
+      try { localStream?.getTracks().forEach(t => t.stop()); } catch {}
       setStream(null);
-      pcRef.current = null;
-      setCallStartTime(null);
       setDuration("00:00");
+      setCallStartTime(null);
       if (localRef.current) localRef.current.srcObject = null;
       if (remoteRef.current) remoteRef.current.srcObject = null;
     };
@@ -188,22 +146,18 @@ const VideoPlayerRaw = () => {
   }, [socket, match?.socketId]);
 
   const toggleMic = () => {
-    if (!stream) return;
-    const audioTrack = stream.getAudioTracks()[0];
+    const audioTrack = stream?.getAudioTracks?.()[0];
     if (audioTrack) {
       audioTrack.enabled = !audioTrack.enabled;
       setMicOn(audioTrack.enabled);
-      // toast(audioTrack.enabled ? "🎙️ Mic is ON" : "🔇 Mic is OFF");
     }
   };
 
   const toggleCamera = () => {
-    if (!stream) return;
-    const videoTrack = stream.getVideoTracks()[0];
+    const videoTrack = stream?.getVideoTracks?.()[0];
     if (videoTrack) {
       videoTrack.enabled = !videoTrack.enabled;
       setCamOn(videoTrack.enabled);
-      // toast(videoTrack.enabled ? "📷 Camera is ON" : "🚫 Camera is OFF");
     }
   };
 
@@ -215,7 +169,6 @@ const VideoPlayerRaw = () => {
           autoPlay
           playsInline
           className="w-full h-full object-cover rounded-3xl"
-          onClick={() => remoteRef.current?.play().catch(() => {})}
         />
         <video
           ref={localRef}
@@ -232,7 +185,6 @@ const VideoPlayerRaw = () => {
           className={`transition-all bg-white/80 hover:bg-pink-100 rounded-full p-3 shadow-lg border-2 border-pink-200 text-xl ${
             isMicOn ? "text-pink-500" : "text-gray-400"
           }`}
-          aria-label={isMicOn ? "Mute microphone" : "Unmute microphone"}
         >
           {isMicOn ? <GiSpeaker /> : <FaVolumeMute />}
         </button>
@@ -241,7 +193,6 @@ const VideoPlayerRaw = () => {
           className={`transition-all bg-white/80 hover:bg-purple-100 rounded-full p-3 shadow-lg border-2 border-purple-200 text-xl ${
             isCamOn ? "text-purple-500" : "text-gray-400"
           }`}
-          aria-label={isCamOn ? "Turn off camera" : "Turn on camera"}
         >
           {isCamOn ? <BsCameraVideoFill /> : <BsCameraVideoOff />}
         </button>

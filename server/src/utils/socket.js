@@ -1,5 +1,3 @@
-// === SOCKET SERVER (Refactored with Timeout & Mapping) ===
-
 const onlineUsers = new Map();         // socket.id => userData
 const userIdToSocket = new Map();      // userId => socket.id
 const socketToUserId = new Map();      // socket.id => userId
@@ -11,7 +9,7 @@ const skipNextUserMap = new Map();     // socket.id => Set of socket ids to skip
 
 export const setupSocket = (io) => {
   io.on("connection", (socket) => {
-    console.log(`[Socket] New connection: ${socket.id}`);
+    console.log(`[Socket] Connected: ${socket.id}`);
 
     // === USER ONLINE ===
     socket.on("user-online", (userData) => {
@@ -26,7 +24,7 @@ export const setupSocket = (io) => {
 
     // === JOIN QUEUE ===
     socket.on("join-queue", () => {
-      if (!queue.includes(socket.id)) {
+      if (!queue.includes(socket.id) && !matches.has(socket.id)) {
         queue.push(socket.id);
         attemptMatch(io);
       }
@@ -51,27 +49,29 @@ export const setupSocket = (io) => {
           user: onlineUsers.get(socket.id),
         });
 
-        if (io.sockets.sockets.get(partner)?.data?.accepted) {
+        const partnerData = io.sockets.sockets.get(partner)?.data;
+        if (partnerData?.accepted) {
           const userA = onlineUsers.get(socket.id);
           const userB = onlineUsers.get(partner);
-          io.to(socket.id).emit("match-confirmed", { partner: userB });
-          io.to(partner).emit("match-confirmed", { partner: userA });
+          io.to(socket.id).emit("match-confirmed", { partner: { socketId: partner, ...userB } });
+          io.to(partner).emit("match-confirmed", { partner: { socketId: socket.id, ...userA } });
         }
       }
     });
 
-    // === DECLINE ===
+    // === DECLINE MATCH ===
     socket.on("request-decline", () => {
       handleSkipOrDecline(socket, io, "decline");
     });
 
-    // === SKIP ===
+    // === SKIP MATCH ===
     socket.on("skip", () => {
       handleSkipWhileMatched(socket, io);
     });
 
-    // === FILE, MESSAGE ===
+    // === TEXT MESSAGE ===
     socket.on("send-message", ({ to, message }) => {
+      if (!to || !message || !io.sockets.sockets.get(to)) return;
       io.to(to).emit("receive-message", {
         from: socket.id,
         user: onlineUsers.get(socket.id),
@@ -79,7 +79,9 @@ export const setupSocket = (io) => {
       });
     });
 
+    // === FILE TRANSFER ===
     socket.on("send-file", ({ to, fileUrl, fileType, fileName, fileSize }) => {
+      if (!to || !fileUrl || !io.sockets.sockets.get(to)) return;
       io.to(to).emit("receive-file", {
         from: socket.id,
         user: onlineUsers.get(socket.id),
@@ -94,30 +96,32 @@ export const setupSocket = (io) => {
     // === FRIEND REQUEST ===
     socket.on("send-friend-request", ({ to }) => {
       const toSocketId = userIdToSocket.get(to);
-      io.to(toSocketId).emit("friend-request-received", {
-        from: socket.id,
-        user: onlineUsers.get(socket.id),
-      });
+      if (toSocketId && io.sockets.sockets.get(toSocketId)) {
+        io.to(toSocketId).emit("friend-request-received", {
+          from: socket.id,
+          user: onlineUsers.get(socket.id),
+        });
+      }
     });
 
     socket.on("friend-response", ({ to, accepted }) => {
       const toSocketId = userIdToSocket.get(to);
-      io.to(toSocketId).emit("friend-response-received", {
-        from: socket.id,
-        accepted,
-        user: onlineUsers.get(socket.id),
-      });
+      if (toSocketId && io.sockets.sockets.get(toSocketId)) {
+        io.to(toSocketId).emit("friend-response-received", {
+          from: socket.id,
+          accepted,
+          user: onlineUsers.get(socket.id),
+        });
+      }
     });
 
     // === FRIEND CALL ===
     socket.on("friend-call", ({ to }) => {
-      const toSocketId = userIdToSocket.get(to );
+      const toSocketId = userIdToSocket.get(to);
       const fromUser = onlineUsers.get(socket.id);
       const toUser = onlineUsers.get(toSocketId);
-      console.log("onlineUsers", toSocketId, fromUser, to, socket.id, toUser);
 
-
-      if (!fromUser || !toUser) return;
+      if (!toSocketId || !fromUser || !toUser || !io.sockets.sockets.get(toSocketId)) return;
 
       io.to(toSocketId).emit("incoming-friend-call", {
         from: socket.id,
@@ -135,6 +139,7 @@ export const setupSocket = (io) => {
     });
 
     socket.on("accept-friend-call", ({ from }) => {
+      if (!io.sockets.sockets.get(from)) return;
       matches.set(socket.id, from);
       matches.set(from, socket.id);
       clearTimeout(pendingCalls.get(from));
@@ -142,16 +147,46 @@ export const setupSocket = (io) => {
 
       const userA = onlineUsers.get(socket.id);
       const userB = onlineUsers.get(from);
-      io.to(from).emit("match-confirmed", { partner: userA });
-      io.to(socket.id).emit("match-confirmed", { partner: userB });
+      io.to(from).emit("match-confirmed", { partner: { socketId: socket.id, ...userA } });
+      io.to(socket.id).emit("match-confirmed", { partner: { socketId: from, ...userB } });
     });
 
     socket.on("reject-friend-call", ({ from }) => {
       clearTimeout(pendingCalls.get(from));
       pendingCalls.delete(from);
-      io.to(from).emit("friend-call-rejected", {
-        user: onlineUsers.get(socket.id),
-      });
+      if (io.sockets.sockets.get(from)) {
+        io.to(from).emit("friend-call-rejected", {
+          user: onlineUsers.get(socket.id),
+        });
+      }
+    });
+
+    // === WEBRTC SIGNALING ===
+    socket.on("webrtc-offer", ({ to, offer }) => {
+      if (io.sockets.sockets.get(to)) {
+        io.to(to).emit("webrtc-offer", {
+          from: socket.id,
+          offer,
+        });
+      }
+    });
+
+    socket.on("webrtc-answer", ({ to, answer }) => {
+      if (io.sockets.sockets.get(to)) {
+        io.to(to).emit("webrtc-answer", {
+          from: socket.id,
+          answer,
+        });
+      }
+    });
+
+    socket.on("webrtc-ice-candidate", ({ to, candidate }) => {
+      if (io.sockets.sockets.get(to)) {
+        io.to(to).emit("webrtc-ice-candidate", {
+          from: socket.id,
+          candidate,
+        });
+      }
     });
 
     // === LEAVE QUEUE ===
@@ -168,11 +203,20 @@ export const setupSocket = (io) => {
       userIdToSocket.delete(userId);
       socketToUserId.delete(socket.id);
 
-      io.emit("active-user-count", onlineUsers.size);
-      broadcastUserList(io);
+      const timeoutId = pendingCalls.get(socket.id);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        pendingCalls.delete(socket.id);
+      }
+
+      const index = queue.indexOf(socket.id);
+      if (index !== -1) queue.splice(index, 1);
 
       handleSkipOrDecline(socket, io, "disconnect");
       skipNextUserMap.delete(socket.id);
+
+      io.emit("active-user-count", onlineUsers.size);
+      broadcastUserList(io);
     });
   });
 };
@@ -187,21 +231,20 @@ function broadcastUserList(io) {
 }
 
 function attemptMatch(io) {
-  if (queue.length >= 2) {
-    for (let i = 0; i < queue.length; i++) {
-      for (let j = i + 1; j < queue.length; j++) {
-        const a = queue[i];
-        const b = queue[j];
-        if (!skipNextUserMap.get(a)?.has(b) && !skipNextUserMap.get(b)?.has(a)) {
-          queue.splice(j, 1);
-          queue.splice(i, 1);
-          matches.set(a, b);
-          matches.set(b, a);
+  if (queue.length < 2) return;
 
-          io.to(a).emit("match-found", { partnerSocket: b, partnerData: onlineUsers.get(b) });
-          io.to(b).emit("match-found", { partnerSocket: a, partnerData: onlineUsers.get(a) });
-          return;
-        }
+  for (let i = 0; i < queue.length; i++) {
+    for (let j = i + 1; j < queue.length; j++) {
+      const a = queue[i], b = queue[j];
+      if (!skipNextUserMap.get(a)?.has(b) && !skipNextUserMap.get(b)?.has(a)) {
+        queue.splice(j, 1);
+        queue.splice(i, 1);
+        matches.set(a, b);
+        matches.set(b, a);
+
+        io.to(a).emit("match-found", { partnerSocket: b, partnerData: onlineUsers.get(b) });
+        io.to(b).emit("match-found", { partnerSocket: a, partnerData: onlineUsers.get(a) });
+        return;
       }
     }
   }
@@ -210,10 +253,12 @@ function attemptMatch(io) {
 function handleSkipWhileMatched(socket, io) {
   const partner = matches.get(socket.id);
   if (partner) {
-    io.to(partner).emit("partner-skipped", {
-      user: onlineUsers.get(socket.id),
-      message: "Your partner has skipped.",
-    });
+    if (io.sockets.sockets.get(partner)) {
+      io.to(partner).emit("partner-skipped", {
+        user: onlineUsers.get(socket.id),
+        message: "Your partner has skipped.",
+      });
+    }
     io.to(socket.id).emit("skipped-partner", {
       user: onlineUsers.get(partner),
       message: "You have skipped.",
@@ -232,13 +277,16 @@ function handleSkipWhileMatched(socket, io) {
 function handleSkipOrDecline(socket, io, reason) {
   const partner = matches.get(socket.id);
   if (partner) {
-    io.to(partner).emit("partner-" + reason, {
-      user: onlineUsers.get(socket.id),
-    });
+    if (io.sockets.sockets.get(partner)) {
+      io.to(partner).emit("partner-" + reason, {
+        user: onlineUsers.get(socket.id),
+      });
+    }
     matches.delete(partner);
-    queue.push(partner);
+    if (reason !== "decline") queue.push(partner);
   }
+
   matches.delete(socket.id);
-  queue.push(socket.id);
+  if (reason !== "decline") queue.push(socket.id);
   attemptMatch(io);
 }
