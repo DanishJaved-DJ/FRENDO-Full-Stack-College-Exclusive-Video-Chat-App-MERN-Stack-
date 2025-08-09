@@ -5,7 +5,9 @@ import { BsCameraVideoFill, BsCameraVideoOff } from "react-icons/bs";
 import { FaVolumeMute } from "react-icons/fa";
 import { GiSpeaker } from "react-icons/gi";
 
-const ICE_SERVERS = { iceServers: [] }; // No STUN/TURN for now
+const ICE_SERVERS = { iceServers: [] }; // Add STUN/TURN later if needed
+
+const MAX_MEDIA_ATTEMPTS = 5;
 
 const VideoPlayerRaw = () => {
   const { socket, match } = useSocket();
@@ -19,6 +21,7 @@ const VideoPlayerRaw = () => {
   const [duration, setDuration] = useState("00:00");
   const remoteCandidatesQueue = useRef([]);
 
+  // Call timer
   useEffect(() => {
     if (!callStartTime) return;
     const interval = setInterval(() => {
@@ -34,15 +37,36 @@ const VideoPlayerRaw = () => {
     if (!socket || !match?.socketId) return;
 
     let localStream;
-    let pc = new RTCPeerConnection(ICE_SERVERS);
-    pcRef.current = pc;
+    let pc;
+    let isCancelled = false;
+
+    const getMediaStream = async () => {
+      let attempts = 0;
+      while (attempts < MAX_MEDIA_ATTEMPTS) {
+        try {
+          return await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        } catch (err) {
+          attempts++;
+          console.warn(`🎥 Media attempt ${attempts} failed: ${err.name}`);
+          if (attempts >= MAX_MEDIA_ATTEMPTS) throw err;
+          await new Promise(res => setTimeout(res, 500));
+        }
+      }
+    };
 
     const start = async () => {
       try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        pc = new RTCPeerConnection(ICE_SERVERS);
+        pcRef.current = pc;
+
+        localStream = await getMediaStream();
+        if (isCancelled) {
+          localStream.getTracks().forEach(t => t.stop());
+          return;
+        }
+
         setStream(localStream);
         if (localRef.current) localRef.current.srcObject = localStream;
-
         localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
         pc.ontrack = (event) => {
@@ -53,7 +77,7 @@ const VideoPlayerRaw = () => {
         };
 
         pc.onicecandidate = (event) => {
-          if (event.candidate) {
+          if (event.candidate && socket && match?.socketId) {
             socket.emit("webrtc-ice-candidate", {
               to: match.socketId,
               candidate: event.candidate,
@@ -62,21 +86,22 @@ const VideoPlayerRaw = () => {
         };
 
         const isOfferer = socket.id > match.socketId;
-        if (isOfferer) {
+        if (isOfferer && pc.signalingState !== "closed") {
           const offer = await pc.createOffer();
+          if (pc.signalingState === "closed") return;
           await pc.setLocalDescription(offer);
           socket.emit("webrtc-offer", { to: match.socketId, offer });
         }
 
         // === SIGNALING HANDLERS ===
         const handleOffer = async ({ from, offer }) => {
-          if (from !== match.socketId) return;
+          if (from !== match.socketId || !pc || pc.signalingState === "closed") return;
           await pc.setRemoteDescription(new RTCSessionDescription(offer));
           const answer = await pc.createAnswer();
+          if (pc.signalingState === "closed") return;
           await pc.setLocalDescription(answer);
           socket.emit("webrtc-answer", { to: match.socketId, answer });
 
-          // Drain ICE candidate queue
           for (const cand of remoteCandidatesQueue.current) {
             await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
           }
@@ -84,9 +109,8 @@ const VideoPlayerRaw = () => {
         };
 
         const handleAnswer = async ({ from, answer }) => {
-          if (from !== match.socketId) return;
+          if (from !== match.socketId || !pc || pc.signalingState === "closed") return;
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
-
           for (const cand of remoteCandidatesQueue.current) {
             await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
           }
@@ -94,7 +118,7 @@ const VideoPlayerRaw = () => {
         };
 
         const handleCandidate = async ({ from, candidate }) => {
-          if (from !== match.socketId) return;
+          if (from !== match.socketId || !pc) return;
           if (!pc.remoteDescription || !pc.remoteDescription.type) {
             remoteCandidatesQueue.current.push(candidate);
           } else {
@@ -117,23 +141,15 @@ const VideoPlayerRaw = () => {
           socket.off("webrtc-answer", handleAnswer);
           socket.off("webrtc-ice-candidate", handleCandidate);
           socket.off("partner-disconnect", handleDisconnect);
-          pc.close();
-          localStream?.getTracks().forEach(t => t.stop());
-          if (localRef.current) localRef.current.srcObject = null;
-          if (remoteRef.current) remoteRef.current.srcObject = null;
-          setStream(null);
-          setDuration("00:00");
-          setCallStartTime(null);
-          pcRef.current = null;
         };
       } catch (err) {
-        toast.error("🚫 Cannot access camera/mic: " + err.message);
+        toast.error("🚫 Media access / start error: " + err.message);
+        console.error("Media access / start error:", err);
       }
     };
 
-    start();
-
-    return () => {
+    const cleanup = () => {
+      isCancelled = true;
       try { pc && pc.close(); } catch {}
       try { localStream?.getTracks().forEach(t => t.stop()); } catch {}
       setStream(null);
@@ -141,7 +157,11 @@ const VideoPlayerRaw = () => {
       setCallStartTime(null);
       if (localRef.current) localRef.current.srcObject = null;
       if (remoteRef.current) remoteRef.current.srcObject = null;
+      pcRef.current = null;
     };
+
+    start();
+    return cleanup;
 
   }, [socket, match?.socketId]);
 

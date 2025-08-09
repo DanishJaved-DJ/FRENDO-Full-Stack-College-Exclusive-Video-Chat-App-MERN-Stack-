@@ -12,13 +12,23 @@ export const SocketProvider = ({ userData, children }) => {
 
   useEffect(() => {
     if (!userData) return;
+
     const s = io(import.meta.env.VITE_BACKEND_DOMAIN, {
       transports: ["websocket"],
       auth: { token: userData.token },
     });
+
     setSocket(s);
 
-    s.emit("user-online", userData);
+    // Always emit user-online on connect & reconnect
+    s.on("connect", () => {
+      console.log("✅ Socket connected:", s.id);
+      s.emit("user-online", {
+        userId: userData.userId || userData._id,  // depends on your shape
+        username: userData.username,
+        avatarUrl: userData.avatarUrl,
+      });
+    });
 
     s.on("active-user-count", (count) => {
       setActiveUsers(count);
@@ -33,7 +43,7 @@ export const SocketProvider = ({ userData, children }) => {
     });
 
     s.on("match-confirmed", ({ partner }) => {
-      setMatch((prev) => ({ ...prev, user: partner }));
+      setMatch({ socketId: partner.socketId, user: partner });
     });
 
     s.on("partner-decline", () => {
@@ -44,8 +54,11 @@ export const SocketProvider = ({ userData, children }) => {
       s.emit("join-queue");
     });
 
-
-    return () => s.disconnect();
+    // Clean up
+    return () => {
+      console.log("🛑 Socket disconnected");
+      s.disconnect();
+    };
   }, [userData]);
 
   return (
