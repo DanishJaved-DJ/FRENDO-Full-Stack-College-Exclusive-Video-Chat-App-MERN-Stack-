@@ -4,7 +4,7 @@ dotenv.config();
 import connectDB from "./db/connect.db.js";
 import app from "./app.js";
 import http from 'http';
-import setupSocket from "./utils/socket.js";
+import setupSocket from "./config/socket.js";
 import { Server } from "socket.io";
 
 const server = http.createServer(app);

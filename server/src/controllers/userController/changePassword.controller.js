@@ -1,8 +1,8 @@
 
-import User from '../models/user.models.js';
+import User from '../../models/user.models.js';
 
 export const changePassword = async (req, res) => {
-  const userId = req.user._id; // From middleware
+  const userId = req.user._id; 
   const { currentPassword, newPassword } = req.body;
 
   if (!currentPassword || !newPassword) {

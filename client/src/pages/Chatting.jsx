@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import RequestPopUp from "../components/RequestPopUp";
 import { TiTick } from "react-icons/ti";
 import { isfriend } from "../helper/IsFriend";
+import EmojiPicker from "emoji-picker-react"; // ✅ emoji picker import
 
 const ChatBox = () => {
   const { socket, match } = useSocket();
@@ -23,42 +24,28 @@ const ChatBox = () => {
     socket.emit("skip");
   };
 
-  // Receive File
+  // File receive handler
   useEffect(() => {
     socket.on("receive-file", ({ from, fileUrl, fileName, fileType, fileSize, time }) => {
-      // toast.success(`📥 File received: ${fileName}`);
       setMessages((prev) => [
         ...prev,
-        {
-          type: "file",
-          from,
-          fileUrl,
-          fileName,
-          fileType,
-          fileSize,
-          time: time || Date.now(),
-        },
+        { type: "file", from, fileUrl, fileName, fileType, fileSize, time: time || Date.now() }
       ]);
     });
-
-    return () => {
-      socket.off("receive-file");
-    };
+    return () => socket.off("receive-file");
   }, [socket]);
 
-  // Handle messages and events
+  // Message and events
   useEffect(() => {
     if (!socket) return;
 
     const handleReceiveMessage = ({ message, user }) => {
       setMessages((prev) => [...prev, { message, user }]);
     };
-
     const handlePartnerSkipped = () => {
       toast.info("Partner skipped");
       navigate("/match-find");
     };
-
     const handleFriendRequest = ({ user }) => {
       setFriendRequestResponse(true);
       setUserData(user);
@@ -91,7 +78,7 @@ const ChatBox = () => {
     toast.success("Friend request sent!");
   };
 
-  // Auto scroll to latest message
+  // Auto scroll to bottom
   const messagesEndRef = useRef(null);
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -135,18 +122,16 @@ const ChatBox = () => {
         )}
       </div>
 
-      {/* RIGHT - Chat UI */}
+      {/* RIGHT - Chat */}
       <div className="relative flex flex-col w-1/2 max-w-2xl bg-white rounded-r-3xl shadow-2xl m-8 p-0">
         <div className="flex items-center justify-center py-6 border-b border-gray-200">
           <h2 className="font-bold text-xl text-gray-800">Text Chat</h2>
         </div>
 
+        {/* Messages */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 bg-gradient-to-b from-white via-pink-50 to-yellow-50 rounded-b-3xl">
           {messages.map((msg, i) => (
-            <div
-              key={i}
-              className={`flex ${msg.user === "me" ? "justify-end" : "justify-start"}`}
-            >
+            <div key={i} className={`flex ${msg.user === "me" ? "justify-end" : "justify-start"}`}>
               <div
                 className={`max-w-xs ${
                   msg.user === "me"
@@ -157,88 +142,16 @@ const ChatBox = () => {
                 }`}
               >
                 <p className="text-xs mb-1 font-semibold">
-                  {msg.user === "me"
-                    ? "You"
-                    : (msg.user?.username || msg.from || "Partner")}
+                  {msg.user === "me" ? "You" : msg.user?.username || msg.from || "Partner"}
                 </p>
-
-                {/* FILE HANDLING */}
-                {msg.type === "file" && (
-                  <div className="mb-2 space-y-1">
-                    {msg.fileType?.startsWith("image") ? (
-                      <div className="flex flex-col items-start">
-                        <img
-                          src={msg.fileUrl}
-                          alt={msg.fileName}
-                          className="max-h-48 max-w-xs rounded-lg border border-pink-200 shadow-md object-contain"
-                        />
-                        <a
-                          href={msg.fileUrl}
-                          download={msg.fileName}
-                          className="mt-1 text-xs text-pink-700 underline hover:text-pink-900 break-all"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {msg.fileName}
-                          {msg.fileSize ? ` (${(msg.fileSize / 1024).toFixed(1)} KB)` : ""}
-                        </a>
-                      </div>
-                    ) : msg.fileType?.startsWith("video") ? (
-                      <div className="flex flex-col items-start">
-                        <video
-                          controls
-                          src={msg.fileUrl}
-                          className="max-h-48 max-w-xs rounded-lg border border-yellow-200 shadow-md"
-                        />
-                        <a
-                          href={msg.fileUrl}
-                          download={msg.fileName}
-                          className="mt-1 text-xs text-yellow-700 underline hover:text-yellow-900 break-all"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {msg.fileName}
-                          {msg.fileSize ? ` (${(msg.fileSize / 1024).toFixed(1)} KB)` : ""}
-                        </a>
-                      </div>
-                    ) : msg.fileType?.startsWith("audio") ? (
-                      <div className="flex flex-col items-start">
-                        <audio controls className="w-full">
-                          <source src={msg.fileUrl} type={msg.fileType} />
-                          Your browser does not support audio playback.
-                        </audio>
-                        <a
-                          href={msg.fileUrl}
-                          download={msg.fileName}
-                          className="mt-1 text-xs text-purple-700 underline hover:text-purple-900 break-all"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {msg.fileName}
-                          {msg.fileSize ? ` (${(msg.fileSize / 1024).toFixed(1)} KB)` : ""}
-                        </a>
-                      </div>
-                    ) : (
-                      <a
-                        href={msg.fileUrl}
-                        download={msg.fileName}
-                        className="inline-block px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-blue-700 underline hover:bg-blue-50 text-xs break-all"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        ⬇️ {msg.fileName}
-                        {msg.fileSize ? ` (${(msg.fileSize / 1024).toFixed(1)} KB)` : ""}
-                      </a>
-                    )}
-                  </div>
-                )}
-
                 {msg.message && <p className="break-words">{msg.message}</p>}
               </div>
             </div>
           ))}
           <div ref={messagesEndRef} />
         </div>
+
+        {/* Input */}
         <div className="flex items-center px-6 py-4 border-t border-gray-200 bg-white rounded-b-3xl space-x-2">
           {/* Emoji Picker */}
           <div className="relative">
@@ -251,33 +164,14 @@ const ChatBox = () => {
               😊
             </button>
             {showEmoji && (
-              <div className="absolute bottom-12 left-0 z-10 bg-white border rounded shadow-lg p-4 max-h-60 w-64 overflow-y-auto grid grid-cols-8 gap-1">
-                {[
-                  "😀", "😂", "😍", "😎", "😭", "😡", "👍", "🙏", "🎉", "🥳", "😅", "🤔",
-                  "😇", "😜", "😱", "😏", "😬", "🤩", "😤", "😢", "😃", "😆", "😉", "😋",
-                  "🥰", "😘", "😚", "😗", "😙", "😛", "😝", "😜", "🤪", "🤗", "🤭", "🤫",
-                  "🤔", "🤐", "🤨", "😐", "😑", "😶", "🙄", "😯", "😦", "😧", "😮", "😲",
-                  "🥺", "😳", "🥵", "🥶", "😱", "😨", "😰", "😥", "😓", "🤤", "😪", "😴",
-                  "😷", "🤒", "🤕", "🤢", "🤮", "🥴", "😵", "🤯", "🤠", "🥳", "😺", "😸",
-                  "😹", "😻", "😼", "😽", "🙀", "😿", "😾", "💩", "👻", "💀", "☠️", "👽",
-                  "👾", "🤖", "🎃", "😈", "👿", "👋", "🤚", "🖐️", "✋", "🖖", "👌", "🤌",
-                  "🤏", "✌️", "🤞", "🤟", "🤘", "🤙", "👈", "👉", "👆", "🖕", "👇", "☝️",
-                  "👍", "👎", "✊", "👊", "🤛", "🤜", "👏", "🙌", "👐", "🤲", "🙏", "💪",
-                  "🦾", "🦵", "🦶", "👣", "👀", "👁️", "👅", "👄", "💋", "💘", "💝", "💖",
-                  "💗", "💓", "💞", "💕", "💟", "❣️", "💔", "❤️", "🧡", "💛", "💚", "💙",
-                  "💜", "🤎", "🖤", "🤍"
-                ].map((emoji) => (
-                  <button
-                    key={emoji}
-                    className="text-xl hover:bg-gray-100 rounded"
-                    onClick={() => {
-                      setInput((prev) => prev + emoji);
-                      setShowEmoji(false);
-                    }}
-                  >
-                    {emoji}
-                  </button>
-                ))}
+              <div className="absolute bottom-12 left-0 z-10">
+                <EmojiPicker
+                  onEmojiClick={(emojiObject) => {
+                    setInput((prev) => prev + emojiObject.emoji);
+                    setShowEmoji(false);
+                  }}
+                  theme="light"
+                />
               </div>
             )}
           </div>

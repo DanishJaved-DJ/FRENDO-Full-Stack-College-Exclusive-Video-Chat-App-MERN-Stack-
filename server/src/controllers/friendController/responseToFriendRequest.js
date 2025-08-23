@@ -1,4 +1,4 @@
-import User from "../models/user.models.js";
+import User from "../../models/user.models.js";
 
 export const respondToFriendRequest = async (req, res) => {
   const { requesterId, action } = req.body; // action: 'accept' or 'reject'

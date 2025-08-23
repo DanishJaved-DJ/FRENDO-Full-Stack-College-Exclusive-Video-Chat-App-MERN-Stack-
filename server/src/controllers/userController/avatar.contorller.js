@@ -1,5 +1,5 @@
-import User from "../models/user.models.js";
-import uploadOnCloudinary from "../utils/cloudinary.js"; // buffer-based upload util
+import User from "../../models/user.models.js";
+import uploadOnCloudinary from "../../utils/cloudinary.js"; 
 import cloudinary from "cloudinary";
 
 

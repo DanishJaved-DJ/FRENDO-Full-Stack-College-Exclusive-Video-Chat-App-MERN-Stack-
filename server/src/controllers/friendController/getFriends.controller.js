@@ -1,4 +1,4 @@
-import User from "../models/user.models.js";
+import User from "../../models/user.models.js";
 
 export const getFriends = async (req, res) => {
   const user = await User.findById(req?.user._id).populate("friends.user", "username email avatarUrl");

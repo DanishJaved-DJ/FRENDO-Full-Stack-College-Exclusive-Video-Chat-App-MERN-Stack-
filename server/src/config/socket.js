@@ -1,4 +1,3 @@
-// socket.js (production-ready rewrite)
 // Features:
 // - multi-tab / multi-socket per user
 // - match confirm timeout
@@ -8,8 +7,8 @@
 // - safer friend-call handling with pendingCalls timeouts
 // - preserves your event API (match-found, match-confirmed, etc.)
 
-const MATCH_CONFIRM_TIMEOUT_MS = 15_000; // how long to wait for both users to accept
-const FRIEND_CALL_TIMEOUT_MS = 15_000;   // friend call ringing timeout
+const MATCH_CONFIRM_TIMEOUT_MS = 7_000; // how long to wait for both users to accept
+const FRIEND_CALL_TIMEOUT_MS = 10_000;   // friend call ringing timeout
 const SKIP_COOLDOWN_MS = 3_000;          // minimum ms between skip-next-user calls from same socket
 
 const onlineUsers = new Map();           // socket.id => userData

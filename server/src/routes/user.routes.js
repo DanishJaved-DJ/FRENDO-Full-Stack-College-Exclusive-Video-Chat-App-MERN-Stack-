@@ -1,16 +1,16 @@
 import {Router} from "express"
-import { signup } from "../controllers/signUp.controllers.js";
+import { signup } from "../controllers/userController/signUp.controllers.js";
 import { upload } from "../middleware/upload.js";
-import { login } from "../controllers/login.controller.js";
-import { logout } from "../controllers/logOut.controller.js";
+import { login } from "../controllers/userController/login.controller.js";
+import { logout } from "../controllers/userController/logOut.controller.js";
 import { authMiddleware } from "../middleware/authMiddlewarw.js";
-import { getProfile } from "../controllers/getProfile.controller.js";
-import { updateProfile } from "../controllers/updateUser.controller.js";
-import { changePassword } from "../controllers/changePassword.controller.js";
-import  uploadAvatar  from "../controllers/avatar.contorller.js";
-import { sendFriendRequest } from "../controllers/SendFriendRequest.js";
-import { respondToFriendRequest } from "../controllers/responseToFriendRequest.js";
-import { getFriends } from "../controllers/getFriends.controller.js";
+import { getProfile } from "../controllers/userController/getProfile.controller.js";
+import { updateProfile } from "../controllers/userController/updateUser.controller.js";
+import { changePassword } from "../controllers/userController/changePassword.controller.js";
+import  uploadAvatar  from "../controllers/userController/avatar.contorller.js";
+import { sendFriendRequest } from "../controllers/friendController/SendFriendRequest.js";
+import { respondToFriendRequest } from "../controllers/friendController/responseToFriendRequest.js";
+import { getFriends } from "../controllers/friendController/getFriends.controller.js";
 import { shareFile } from "../controllers/shareFile.controller.js";
 
 

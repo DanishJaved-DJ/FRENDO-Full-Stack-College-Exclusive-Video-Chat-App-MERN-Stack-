@@ -1,4 +1,4 @@
-import User from '../models/user.models.js';
+import User from '../../models/user.models.js';
 
 export const getProfile = async (req, res) => {
   try {
@@ -10,8 +10,6 @@ export const getProfile = async (req, res) => {
 
     // console.log('User ID:', userId);
     
-
-    // Fetch user from DB (exclude password)
     const user = await User.findById(userId).select('-password');
 
     if (!user) {

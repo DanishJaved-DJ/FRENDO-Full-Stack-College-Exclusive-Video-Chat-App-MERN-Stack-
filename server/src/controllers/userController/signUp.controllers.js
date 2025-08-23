@@ -1,6 +1,6 @@
-import User from '../models/user.models.js';
-import { extractTextFromImage } from '../utils/ocrVerify.js';
-import uploadOnCloudinary from '../utils/cloudinary.js';
+import User from '../../models/user.models.js';
+import { extractTextFromImage } from '../../utils/ocrVerify.js';
+import uploadOnCloudinary from '../../utils/cloudinary.js';
 
 export const signup = async (req, res) => {
   try {
@@ -41,7 +41,7 @@ export const signup = async (req, res) => {
 
     if (!nameMatch || !collegeMatch) {
       return res.status(400).json({
-        message: 'OCR verification failed: make sure your college ID contains your name and college name clearly.',
+        message: 'input same NAME and COLLEGE as mention on your ID',
       });
     }
 

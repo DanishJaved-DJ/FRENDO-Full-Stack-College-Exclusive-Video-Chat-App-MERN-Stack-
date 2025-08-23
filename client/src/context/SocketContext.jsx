@@ -1,3 +1,4 @@
+// src/context/SocketContext.jsx
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { io } from "socket.io-client";
 
@@ -20,23 +21,19 @@ export const SocketProvider = ({ userData, children }) => {
 
     setSocket(s);
 
-    // Always emit user-online on connect & reconnect
+    // ✅ On connect/reconnect
     s.on("connect", () => {
       console.log("✅ Socket connected:", s.id);
       s.emit("user-online", {
-        userId: userData.userId || userData._id,  // depends on your shape
+        userId: userData.userId || userData._id, // depends on your shape
         username: userData.username,
         avatarUrl: userData.avatarUrl,
       });
     });
 
-    s.on("active-user-count", (count) => {
-      setActiveUsers(count);
-    });
-
-    s.on("friend-status-update", (users) => {
-      setOnlineUsers(users);
-    });
+    // --- Core events ---
+    s.on("active-user-count", (count) => setActiveUsers(count));
+    s.on("friend-status-update", (users) => setOnlineUsers(users));
 
     s.on("match-found", ({ partnerSocket, partnerData }) => {
       setMatch({ socketId: partnerSocket, user: partnerData });
@@ -47,22 +44,65 @@ export const SocketProvider = ({ userData, children }) => {
     });
 
     s.on("partner-decline", () => {
+      setMatch(null);
       s.emit("join-queue");
     });
 
     s.on("partner-skipped", () => {
+      setMatch(null);
       s.emit("join-queue");
     });
 
-    // Clean up
+    // --- WebRTC signaling events ---
+    s.on("webrtc-offer", ({ from, sdp }) => {
+      console.log("📩 Received offer from:", from);
+      // Handled in VideoPlayer / useWebRTC hook
+    });
+
+    s.on("webrtc-answer", ({ from, sdp }) => {
+      console.log("📩 Received answer from:", from);
+    });
+
+    s.on("webrtc-ice-candidate", ({ from, candidate }) => {
+      console.log("📩 Received ICE candidate from:", from);
+    });
+
+    // Cleanup
     return () => {
       console.log("🛑 Socket disconnected");
       s.disconnect();
     };
   }, [userData]);
 
+  // --- Signaling emitters ---
+  const sendOffer = (to, sdp) => {
+    if (!socket) return;
+    socket.emit("webrtc-offer", { to, sdp });
+  };
+
+  const sendAnswer = (to, sdp) => {
+    if (!socket) return;
+    socket.emit("webrtc-answer", { to, sdp });
+  };
+
+  const sendIceCandidate = (to, candidate) => {
+    if (!socket) return;
+    socket.emit("webrtc-ice-candidate", { to, candidate });
+  };
+
   return (
-    <SocketContext.Provider value={{ activeUsers, socket, onlineUsers, match, setMatch }}>
+    <SocketContext.Provider
+      value={{
+        activeUsers,
+        socket,
+        onlineUsers,
+        match,
+        setMatch,
+        sendOffer,
+        sendAnswer,
+        sendIceCandidate,
+      }}
+    >
       {children}
     </SocketContext.Provider>
   );

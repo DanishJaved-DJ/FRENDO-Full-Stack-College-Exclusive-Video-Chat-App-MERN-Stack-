@@ -5,7 +5,16 @@ import { BsCameraVideoFill, BsCameraVideoOff } from "react-icons/bs";
 import { FaVolumeMute } from "react-icons/fa";
 import { GiSpeaker } from "react-icons/gi";
 
-const ICE_SERVERS = { iceServers: [] }; // Add STUN/TURN later if needed
+// ✅ Added Google STUN servers
+const ICE_SERVERS = {
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" },
+    { urls: "stun:stun3.l.google.com:19302" },
+    { urls: "stun:stun4.l.google.com:19302" },
+  ],
+};
 
 const MAX_MEDIA_ATTEMPTS = 5;
 
@@ -56,7 +65,7 @@ const VideoPlayerRaw = () => {
 
     const start = async () => {
       try {
-        pc = new RTCPeerConnection(ICE_SERVERS);
+        pc = new RTCPeerConnection(ICE_SERVERS); // ✅ Now using STUN
         pcRef.current = pc;
 
         localStream = await getMediaStream();
