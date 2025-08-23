@@ -1,8 +1,8 @@
-import { useRef, useState } from "react";
+import React, { useRef, useState } from "react"; 
 import Api from "../serverApi/Api";
 import { toast } from "sonner";
 
-const FileUploader = ({ socket, toSocketId }) => {
+const FileUploader = ({ socket, toSocketId, onFileSent }) => {
   const fileInputRef = useRef();
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -11,15 +11,18 @@ const FileUploader = ({ socket, toSocketId }) => {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { // Limit to 10MB
+    if (file.size > 10 * 1024 * 1024) {
       toast.error("❌ File size exceeds 10MB limit");
-      fileInputRef.current.value = ""; // Clear input
+      fileInputRef.current.value = "";
       return;
     }
     setSelectedFile(file);
 
-    // Generate preview URL for images, videos, audio
-    if (file.type.startsWith("image/") || file.type.startsWith("video/") || file.type.startsWith("audio/")) {
+    if (
+      file.type.startsWith("image/") ||
+      file.type.startsWith("video/") ||
+      file.type.startsWith("audio/")
+    ) {
       setPreviewUrl(URL.createObjectURL(file));
     } else {
       setPreviewUrl(null);
@@ -38,7 +41,7 @@ const FileUploader = ({ socket, toSocketId }) => {
         body: formData,
       });
       const { fileUrl, fileName, fileType, fileSize } = await fetchData.json();
-      
+
       socket.emit("send-file", {
         to: toSocketId,
         fileUrl,
@@ -46,6 +49,9 @@ const FileUploader = ({ socket, toSocketId }) => {
         fileType,
         fileSize,
       });
+
+      onFileSent?.({ from: "me", fileUrl, fileName, fileType, fileSize });
+
       toast.success("📎 File sent");
       setSelectedFile(null);
       setPreviewUrl(null);
@@ -76,7 +82,6 @@ const FileUploader = ({ socket, toSocketId }) => {
         className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-tr from-[#f9ce34] via-[#ee2a7b] to-[#6228d7] shadow-lg hover:scale-105 transition"
         title="Send File"
       >
-        {/* Instagram-style paperclip icon */}
         <svg
           xmlns="http://www.w3.org/2000/svg"
           className="w-6 h-6 text-white"
@@ -84,14 +89,18 @@ const FileUploader = ({ socket, toSocketId }) => {
           viewBox="0 0 24 24"
           stroke="currentColor"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.586-6.586a4 4 0 10-5.656-5.656l-7.07 7.07a6 6 0 108.485 8.485l7.071-7.07" />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.586-6.586a4 4 0 10-5.656-5.656l-7.07 7.07a6 6 0 108.485 8.485l7.071-7.07"
+          />
         </svg>
       </button>
 
-      {/* Preview Sidebar */}
+      {/* Preview */}
       {selectedFile && (
         <div className="fixed right-20 bottom-8 h-2/3 w-80 bg-white shadow-lg p-0 z-50 flex flex-col border-l border-gray-200" style={{ maxHeight: "440px", minHeight: "340px" }}>
-          {/* Instagram-style header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-[#f9ce34] via-[#ee2a7b] to-[#6228d7]">
             <span className="font-bold text-white tracking-wide">Preview</span>
             <button

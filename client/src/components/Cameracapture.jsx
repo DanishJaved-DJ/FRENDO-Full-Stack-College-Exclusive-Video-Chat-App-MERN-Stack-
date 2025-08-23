@@ -1,53 +1,38 @@
 // src/components/CameraCapture.jsx
-import React, { useRef, useState } from "react";
+import React, { useRef } from "react";
 import Webcam from "react-webcam";
 
 const videoConstraints = {
   width: 1280,
   height: 720,
-  facingMode: "user", // use "environment" for back camera on mobile
+  facingMode: "user", // "environment" for back camera on mobile
 };
 
-const CameraCapture = () => {
+const CameraCapture = ({ setCameraImage }) => {
   const webcamRef = useRef(null);
-  const [image, setImage] = useState(null);
 
   const capturePhoto = () => {
-    const screenshot = webcamRef.current.getScreenshot();
-    setImage(screenshot);
+    if (webcamRef.current) {
+      const screenshot = webcamRef.current.getScreenshot();
+      setCameraImage(screenshot); // send captured photo to parent
+    }
   };
 
-  const retakePhoto = () => setImage(null);
-
   return (
-    <div className="flex flex-col items-center gap-4">
-      {!image ? (
-        <>
-          <Webcam
-            audio={false}
-            ref={webcamRef}
-            screenshotFormat="image/jpeg"
-            videoConstraints={videoConstraints}
-            className="rounded-lg shadow-md"
-          />
-          <button
-            onClick={capturePhoto}
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg"
-          >
-            Capture Photo
-          </button>
-        </>
-      ) : (
-        <>
-          <img src={image} alt="Captured" className="rounded-lg shadow-md" />
-          <button
-            onClick={retakePhoto}
-            className="px-4 py-2 bg-yellow-500 text-white rounded-lg"
-          >
-            Retake
-          </button>
-        </>
-      )}
+    <div className="flex flex-col items-center gap-4 w-full">
+      <Webcam
+        audio={false}
+        ref={webcamRef}
+        screenshotFormat="image/jpeg"
+        videoConstraints={videoConstraints}
+        className="rounded-lg shadow-md w-full max-h-[350px]"
+      />
+      <button
+        onClick={capturePhoto}
+        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+      >
+        Capture Photo
+      </button>
     </div>
   );
 };
