@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+   mongo:
+    image: mongo:7
+    container_name: frendo-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+   redis:
+    image: redis:7-alpine
+    container_name: frendo-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+   server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: frendo-server
+    restart: unless-stopped
+    env_file:
+      - ./server/.env
+    depends_on:
+      - mongo
+      - redis
+    ports:
+      - "3000:3000"  
+ 
+
+   client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: frendo-client
+    restart: unless-stopped
+    env_file:
+      - ./client/.env
+    depends_on:
+      - server
+    ports:
+      - "5173:5173"
+
+volumes:
+  mongo_data:

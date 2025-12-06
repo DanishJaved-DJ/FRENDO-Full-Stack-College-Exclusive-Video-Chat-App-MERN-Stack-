@@ -12,12 +12,18 @@ import { sendFriendRequest } from "../controllers/friendController/SendFriendReq
 import { respondToFriendRequest } from "../controllers/friendController/responseToFriendRequest.js";
 import { getFriends } from "../controllers/friendController/getFriends.controller.js";
 import { shareFile } from "../controllers/shareFile.controller.js";
-
+import { rateLimit } from "../middleware/rateLimit.js";  
 
 const router=Router();
 
 router.post("/signup", upload.single("collegeIdProof"), signup);
-router.post('/login', login);
+//rate limt on login for 5 req within 60 s
+router.post(
+  '/login',
+  rateLimit({ windowSeconds: 60, maxRequests: 5, keyPrefix: "login" }),
+  login
+);
+
 router.post('/logout', logout);
 router.get('/user-profile', authMiddleware, getProfile);
 router.put('/updateProfile', authMiddleware, updateProfile);
